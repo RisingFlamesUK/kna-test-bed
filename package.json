@@ -1,0 +1,46 @@
+{
+  "name": "kickstart-node-app-testbed",
+  "version": "0.1.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "vitest run",
+    "test:e2e": "vitest run test/e2e/suite.test.ts --test-timeout=120000",
+    "test:e2e:watch": "vitest --watch test/e2e/suite.test.ts",
+    "prepare": "husky",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write ."
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "directories": {
+    "test": "test"
+  },
+  "devDependencies": {
+    "@types/fs-extra": "^11.0.4",
+    "@types/node": "^24.6.0",
+    "@types/pg": "^8.15.5",
+    "@typescript-eslint/eslint-plugin": "^8.45.0",
+    "@typescript-eslint/parser": "^8.45.0",
+    "dotenv": "^17.2.3",
+    "eslint": "^9.37.0",
+    "eslint-config-prettier": "^9.1.2",
+    "eslint-plugin-import": "^2.32.0",
+    "eslint-plugin-vitest": "^0.5.4",
+    "execa": "^9.6.0",
+    "fs-extra": "^11.3.2",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.2.3",
+    "pg": "^8.16.3",
+    "prettier": "^3.6.2",
+    "typescript": "^5.9.2",
+    "typescript-eslint": "^8.45.0",
+    "vitest": "^3.2.4"
+  },
+  "overrides": {
+    "@typescript-eslint/utils": "^8"
+  }
+}

@@ -1,0 +1,9 @@
+#!/usr/bin/env sh
+. "$(dirname -- "$0")/_/husky.sh"
+
+if [ "$RUN_PREPUSH_TESTS" = "1" ]; then
+  echo "🧪 pre-push: running tests…"
+  npm test
+else
+  echo "🪪 pre-push: tests skipped (set RUN_PREPUSH_TESTS=1 to enable)"
+fi
