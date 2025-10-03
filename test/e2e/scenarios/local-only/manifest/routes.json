@@ -1,0 +1,12 @@
+{
+  "public": [
+    { "path": "/", "method": "GET", "expect": "200" },
+    { "path": "/login", "method": "GET", "expect": "200" },
+    { "path": "/register", "method": "GET", "expect": "200" }
+  ],
+  "protected": [
+    { "path": "/logout", "method": "GET", "expect": "302" },
+    { "path": "/account/password", "method": "GET", "expect": "302" }
+  ],
+  "oauth": []
+}

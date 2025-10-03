@@ -8,6 +8,9 @@ test/tmp/
 # test artifacts and temp apps
 /.tmp/
 
+# logs
+logs/
+
 # real .env
 /**/*.real.env
 .real-env/

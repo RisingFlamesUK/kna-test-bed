@@ -1,0 +1,33 @@
+{
+  "required": [
+    ".env",
+    ".gitignore",
+    "app.js",
+    "config/database.js",
+    "config/passport-local.js",
+    "config/user-store.js",
+    "docs/architecture.md",
+    "docs/local-sessions.md",
+    "docs/postgres.md",
+    "docs/sessions.md",
+    "middleware/session-check.js",
+    "NEXT_STEPS.md",
+    "package-lock.json",
+    "package.json",
+    "public/js/index.js",
+    "public/styles/main.css",
+    "README.md",
+    "routes/account.js",
+    "routes/auth.js",
+    "utils/encryption-handler.js",
+    "utils/ensure-auth.js",
+    "utils/security.js",
+    "utils/validate-env.js",
+    "views/account-password.ejs",
+    "views/index.ejs",
+    "views/login.ejs",
+    "views/partials/footer.ejs",
+    "views/partials/header.ejs",
+    "views/register.ejs"
+  ]
+}
