@@ -18,6 +18,10 @@ logs/
 # directory tree generator
 directory_tree.json
 
+# under development
+local+google/
+test/e2e/scenarios/local-only/config/test.json
+
 ############################
 # Node setings from GitHub #
 ############################

@@ -17,6 +17,7 @@
   - [`suite/global-setup.ts`](#suiteglobal-setupts)
 - Test Components
   - [`test/components/scaffold-command-assert.ts`](#testcomponentsscaffold-command-assertts)
+  - [`test/components/interactive-driver.ts`](#testcomponentsinteractive-driverts)
   - [`test/components/env-assert.ts`](#testcomponentsenv-assertts)
   - Planned
     - [`test/components/server-assert.ts`](#testcomponentsserver-assertts-planned)
@@ -135,51 +136,106 @@ export function scenarioLoggerFromEnv(scenario: string): Logger; // uses process
 
 **Status:** Implemented
 
-**Purpose**  
-Run subprocesses with **uniform, readable logs**: writes `cmd=…`, a wrapped `args=[…]` list, and a **boxed** capture of stdout/stderr with an **exit code** footer.
+---
 
-**At a glance**
+### Purpose
 
-| Function    | What it does                                                                                            |
-| ----------- | ------------------------------------------------------------------------------------------------------- |
-| `writeArgs` | Logs a pretty/JSON-ish one-liner or wrapped `args=[…]` to the logger, without splitting individual args |
-| `execBoxed` | Runs a command via `execa`, logs `cmd`/`args`, then draws a box with the live output + exit code        |
+Provides standardized subprocess execution helpers with consistent **logging, output boxing, and ANSI-safe streaming**.  
+It unifies how the suite runs and captures CLI tools, Docker commands, and interactive processes.
 
-**Exports**
+---
+
+### At a glance
+
+| Item           | Summary                                                                               |
+| -------------- | ------------------------------------------------------------------------------------- |
+| Modes          | **Buffered:** `execBoxed` • **Streaming/interactive:** `openBoxedProcess`             |
+| Boxed logs     | Uses the suite logger; **opens box on first output**, closes with an exit-code footer |
+| ANSI stripping | Streaming path **strips ANSI** (colors/cursor controls) for readable logs             |
+| Args wrapping  | Pretty JSON-style `args` list, wrapped at `argsWrapWidth` without splitting tokens    |
+| Return shapes  | `execBoxed → { stdout, exitCode }` • `openBoxedProcess → { proc, closeBox }`          |
+| Use cases      | Generators, Docker commands, long-running or interactive CLIs                         |
+
+---
+
+### Exports
 
 ```ts
-export type ExecBoxedOptions = import('execa').Options & {
-  title?: string; // box header, e.g. "docker output"
-  markStderr?: boolean; // default true → prefix stderr lines with "! "
-  argsWrapWidth?: number; // wrap args across lines; no wrapping when omitted
-  windowsHide?: boolean; // default true on Windows
+// Result for buffered runs
+export type SimpleExec = {
+  stdout: string;
+  exitCode: number;
+};
+
+// Buffered execution (boxed)
+export type ExecBoxedOptions = {
+  title?: string;
+  argsWrapWidth?: number;
+  windowsHide?: boolean;
+  cwd?: string;
+  env?: Record<string, string>;
 };
 
 export async function execBoxed(
+  log: Logger,
+  cmd: string,
+  args: string[],
+  opts?: ExecBoxedOptions,
+): Promise<SimpleExec>;
+
+// Streaming / interactive execution (boxed, ANSI-stripped)
+export type OpenBoxedOpts = {
+  title?: string;
+  cwd?: string;
+  env?: Record<string, string>;
+  windowsHide?: boolean;
+};
+
+export type RunningProc = {
+  stdin: NodeJS.WritableStream | null | undefined;
+  stdout: NodeJS.ReadableStream | null | undefined;
+  stderr: NodeJS.ReadableStream | null | undefined;
+  wait: () => Promise<{ exitCode: number }>;
+};
+
+export function openBoxedProcess(
   log: Logger | undefined,
   cmd: string,
-  args: Array<string | number>,
-  opts?: ExecBoxedOptions,
-): Promise<{ stdout: string; exitCode: number }>;
-
-export function writeArgs(
-  log: Logger | undefined,
-  args: Array<string | number>,
-  wrapWidth?: number,
-): void;
+  args: string[],
+  opts?: OpenBoxedOpts,
+): { proc: RunningProc; closeBox: (exitCode: number) => void };
 ```
 
-**Inputs/Outputs**
+---
 
-- **Input:** `cmd`, `args`, and optional `execa` options; optional wrap width for args
-- **Output:** boxed, labeled capture of the child process output, plus return `{ stdout, exitCode }`
+### Inputs/Outputs
 
-**Dependencies**  
-`execa`, `suite/components/logger.ts`
+**Inputs** — `cmd: string`, `args: string[]`, logger, options (title, wrapping width, cwd, env, windowsHide)  
+**Outputs** — `execBoxed → Promise<SimpleExec>` • `openBoxedProcess → { proc, closeBox }` (use `await proc.wait()` → `{ exitCode }`)
 
-**Error behavior**
+---
 
-- Propagates process errors; always writes an exit-code footer for successful spawns
+### Dependencies
+
+- `execa` (spawning)
+- `suite/components/logger.ts` (boxed logging)
+
+---
+
+### Behavior & details
+
+- Boxes open lazily (first output) to avoid empty frames
+- Streaming lines are flushed as they arrive; progress repaint noise is minimized
+- Consistent formatting across Docker, scaffolds, and generator runs
+
+---
+
+### Error behavior
+
+- Non-zero exits preserved (returned via `{ exitCode }`)
+- Exceptions only if callers rethrow
+- Streaming path strips ANSI before logging
+- Always writes boxed footer: `exit code: N`
 
 ---
 
@@ -589,6 +645,154 @@ export async function assertScaffoldCommand(opts: ScaffoldCmdOpts): Promise<Scaf
 
 ---
 
+## Test/components/interactive-driver.ts
+
+**Status:** Implemented
+
+---
+
+### Purpose
+
+Automates **interactive CLI prompts** in end-to-end tests.  
+Matches stdout with regex and sends keyboard responses, including **checkbox navigation with scrolling**, while streaming output into suite logs.
+
+---
+
+### At a glance
+
+| Item                | Summary                                                                               |
+| ------------------- | ------------------------------------------------------------------------------------- |
+| Prompt types        | **Text:** regex → `send` • **Checkbox:** label-based selection with arrow/space/enter |
+| Resilience          | Ignores ANSI, tolerates **ordering changes**, supports long lists with scrolling      |
+| Timeouts            | Per-prompt timeouts (defaults: 15s text, 20s checkbox)                                |
+| Required selections | `required: true` throws if a requested label isn’t found within the scan              |
+| Logging             | Shares the same **boxed** output as processes (via `openBoxedProcess`)                |
+
+---
+
+### Exports
+
+```ts
+// Text prompt
+export type TextPrompt = {
+  type?: 'text';
+  expect: RegExp;
+  send: string; // include '\n' if needed
+  timeoutMs?: number; // default 15_000
+};
+
+// Checkbox prompt (Inquirer-style)
+export type CheckboxPrompt = {
+  type: 'checkbox';
+  expect: RegExp; // identifies the checkbox section
+  select: string[]; // labels to toggle (case-insensitive)
+  submit?: boolean; // default true → press Enter after selections
+  required?: boolean; // throw if any label not found after bounded scan
+  maxScroll?: number; // cap down-arrow steps (default 2000)
+  timeoutMs?: number; // default 20_000
+};
+
+export type Prompt = TextPrompt | CheckboxPrompt;
+
+export async function runInteractive(opts: {
+  cmd: string;
+  args?: string[];
+  cwd?: string;
+  env?: Record<string, string>;
+  prompts: Prompt[];
+  logger?: Logger;
+  logTitle?: string;
+  windowsHide?: boolean;
+}): Promise<{
+  stdout: string;
+  stderr: string;
+  exitCode: number;
+  timedOutAt?: number; // index of the prompt that timed out
+}>;
+```
+
+---
+
+### Inputs/Outputs
+
+**Inputs** — `cmd`, `args?`, `cwd?`, `env?`, `prompts: Prompt[]`, optional `logger`/`logTitle`  
+**Outputs** — `{ stdout, stderr, exitCode, timedOutAt? }`
+
+---
+
+### Dependencies
+
+- `suite/components/proc.ts` (uses `openBoxedProcess`)
+- `suite/components/logger.ts`
+
+---
+
+### Behavior & details
+
+- **ANSI-aware parsing** (colors/cursor codes removed before matching)
+- **Checkbox scanning** scrolls through long lists, toggles only if not already selected, then submits
+- Designed to produce realistic, stable automation across generators and scaffolds
+
+---
+
+### Error behavior
+
+- Times out per prompt; exposes `timedOutAt` on failure
+- With `required: true`, errors when a requested checkbox label isn’t found within `maxScroll`
+- Fails cleanly if the subprocess exits before prompts complete
+
+---
+
+## Test/components/env-assert.ts
+
+**Status:** Implemented
+
+**Purpose**  
+Validate that the scaffolded `.env` matches a manifest: **required** keys must be present and **uncommented**; **optional** keys, when present, should be **commented**.
+
+**Exports**
+
+```ts
+export type EnvManifest = {
+  required?: string[];
+  optional?: string[];
+};
+
+export async function assertEnvMatches({
+  appDir,
+  manifestPath,
+  envFile = '.env',
+  log,
+  scenarioName,
+}: {
+  appDir: string;
+  manifestPath: string;
+  envFile?: string;
+  log?: Logger;
+  scenarioName?: string;
+}): Promise<void>;
+```
+
+**Behavior**
+
+- Parses `.env` lines into **active** (`FOO=bar`) vs **commented** (`# FOO=bar`) keys
+- Computes **exact differences** vs the manifest (not just counts)
+- Fails with a clear list of **Missing required**, **Required commented**, **Missing optional**, and **Optional active**
+- Logs step + details using `logger.ts` (so it integrates with scenario logs and numbering)
+
+**Inputs/Outputs**
+
+- **Inputs:** `appDir`, manifest path, optional logger or `scenarioName` to open the scenario log
+- **Outputs:** Log lines and **fail/throw** on mismatch; ✅ pass when all rules satisfied
+
+**Dependencies**  
+`fs-extra`, `path`, `suite/components/logger.ts` (optional)
+
+**Error behavior**  
+Throws if the `.env` or manifest file is missing; otherwise throws with detailed mismatch reasons.
+
+---
+
 ## Test/components/fs-assert.ts (Planned)
 
 **Status:** Planned
@@ -647,56 +851,6 @@ export async function writeMergedEnv(
   opts?: { overwritePort?: boolean },
 ): Promise<string>; // returns path to written .env
 ```
-
----
-
-## Test/components/env-assert.ts
-
-**Status:** Implemented
-
-**Purpose**  
-Validate that the scaffolded `.env` matches a manifest: **required** keys must be present and **uncommented**; **optional** keys, when present, should be **commented**.
-
-**Exports**
-
-```ts
-export type EnvManifest = {
-  required?: string[];
-  optional?: string[];
-};
-
-export async function assertEnvMatches({
-  appDir,
-  manifestPath,
-  envFile = '.env',
-  log,
-  scenarioName,
-}: {
-  appDir: string;
-  manifestPath: string;
-  envFile?: string;
-  log?: Logger;
-  scenarioName?: string;
-}): Promise<void>;
-```
-
-**Behavior**
-
-- Parses `.env` lines into **active** (`FOO=bar`) vs **commented** (`# FOO=bar`) keys
-- Computes **exact differences** vs the manifest (not just counts)
-- Fails with a clear list of **Missing required**, **Required commented**, **Missing optional**, and **Optional active**
-- Logs step + details using `logger.ts` (so it integrates with scenario logs and numbering)
-
-**Inputs/Outputs**
-
-- **Inputs:** `appDir`, manifest path, optional logger or `scenarioName` to open the scenario log
-- **Outputs:** Log lines and **fail/throw** on mismatch; ✅ pass when all rules satisfied
-
-**Dependencies**  
-`fs-extra`, `path`, `suite/components/logger.ts` (optional)
-
-**Error behavior**  
-Throws if the `.env` or manifest file is missing; otherwise throws with detailed mismatch reasons.
 
 ---
 

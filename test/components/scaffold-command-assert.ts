@@ -12,6 +12,7 @@ import {
   type Logger,
 } from '../../suite/components/logger.ts';
 import { execBoxed } from '../../suite/components/proc.ts';
+import { runInteractive, Prompt } from './interactive-driver.ts';
 
 export type ScaffoldCmdOpts = {
   scenarioName: string; // e.g. "local-only"
@@ -20,6 +21,10 @@ export type ScaffoldCmdOpts = {
   keepArtifacts?: boolean; // default false
   log?: Logger; // optional: pass an existing logger to continue numbering across components
   subcommand?: string; // default "web" (future-proof)
+  interactive?: {
+    prompts: Prompt[];
+    transcriptPath?: string;
+  };
   generator?:
     | { kind: 'linked'; spec: string } // default: { kind: "linked", spec: "kickstart-node-app" }
     | { kind: 'node'; entry: string } // local dev entry file, e.g. "./packages/cli/bin/cli.js"
@@ -108,21 +113,42 @@ export async function assertScaffoldCommand(opts: ScaffoldCmdOpts): Promise<Scaf
 
   // 5) Run the process
   try {
-    if (isInteractive) {
-      // Prompts visible in local terminal; not recommended for CI runs
+    if (isInteractive && opts.interactive) {
+      // Automated interactive path (driven prompts)
+      log.step('Run generator (interactive)');
+      const res = await runInteractive({
+        cmd,
+        args,
+        cwd: process.cwd(),
+        prompts: opts.interactive.prompts,
+        logger: log,
+        logTitle: 'generator output',
+      });
+
+      if (res.exitCode !== 0) {
+        log.fail(
+          `Generator exited with code ${res.exitCode}${
+            res.timedOutAt != null ? ` (timed out at prompt #${res.timedOutAt + 1})` : ''
+          }`,
+        );
+        throw new Error('interactive generator failed');
+      }
+    } else if (isInteractive) {
+      // Manual interactive (visible in local terminal; not recommended for CI)
       log.write('(interactive) generator output is streaming to the terminal');
       await execa(cmd, args, { cwd: process.cwd(), stdio: 'inherit' });
     } else {
+      // Non-interactive / answers-file / --silent
       await execBoxed(log, cmd, args, {
         title: 'generator output',
         argsWrapWidth: 100, // tweak to taste (e.g. 120)
       });
     }
+
     log.pass(`Scaffold completed successfully`);
   } catch (e: any) {
     const msg = e?.message ?? String(e);
     log.fail(`Scaffold failed: ${msg}`);
-
     throw e;
   }
 

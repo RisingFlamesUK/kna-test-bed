@@ -26,7 +26,9 @@
   - cleans up temp apps, test DBs, and the container on teardown
 - **Per-scenario tests** are small and **call typed helpers** in `test/e2e/components/*`.
 - **Per-scenario manifests** (expected files/env/routes) live under each scenario folder.
-- **Subprocess handling**: `suite/components/proc.ts` provides `execBoxed(...)` so Docker & generator output is visually boxed and attached to the right step in logs.
+- **Subprocess handling:** `suite/components/proc.ts` exposes:
+  - `execBoxed` for buffered runs (args nicely wrapped, exit code footer).
+  - `openBoxedProcess` for streaming/interactive runs (stdin access) with **ANSI stripped** so logs stay readable (e.g., checkbox menus).
 
 ---
 
@@ -62,14 +64,15 @@ kna-test-bed
 ├── logs
 │   └── <date>
 │       ├── e2e                               # e2e logs per test run
-│       │   ├── bearer+microsoft.log
-│       │   ├── local-only.log
-│       │   ├── local+google.log
+│       │   ├── bearer+microsoft-silent.log
+│       │   ├── local-only-answers.log
+│       │   ├── local-only-interactive.log
+│       │   ├── local-only-silent.log
+│       │   ├── local+google-silent.log
 │       │   └── suite-sentinel.log            # log of core suite functionality test
 │       └── suite.log                         # logs for suite. e.g. docker, pg, cleanup
 ├── suite
 │   ├── components
-│   │   ├── cleanup.ts
 │   │   ├── constants.ts
 │   │   ├── docker-suite.ts
 │   │   ├── logger.ts
@@ -85,6 +88,7 @@ kna-test-bed
 │   │   ├── env-update.ts                     # inject env with real settings
 │   │   ├── fs-assert.ts                      # testing files as expected
 │   │   ├── http-assert.ts                    # testing routes (not auth)
+│   │   ├── interactive-driver.ts
 │   │   ├── pg-assert.ts                      # testing pg
 │   │   ├── scaffold-command-assert.ts        # testingCLI command to scaffold
 │   │   └── server-assert.ts                  # testing scaffolded app server
@@ -100,7 +104,9 @@ kna-test-bed
 │       │   │   └── bearer+microsoft.test.ts  # scenario specific tests
 │       │   ├── local-only
 │       │   │   ├── .real-env
-│       │   │   │   └── real.env
+│       │   │   │   └── .real.env
+│       │   │   ├── config
+│       │   │   │   └── answers.json          # for answers file scenario
 │       │   │   ├── manifest
 │       │   │   │   ├── env.json
 │       │   │   │   ├── files.json
@@ -118,6 +124,7 @@ kna-test-bed
 ├── package.json
 ├── README.md
 └── vitest.config.ts
+
 ```
 
 ---
@@ -169,6 +176,8 @@ The detailed API for suite and test components now lives in **[`docs/components.
 
 - **Suite components** (Docker + Postgres + logging) are implemented and documented there.
 - **Test components** are listed with **Status: Planned** and proposed signatures. We’ll fill them in one by one as we agree on each piece.
+
+Interactive scenarios are driven by **`test/components/interactive-driver.ts`**, which uses `openBoxedProcess` to stream a generator’s TTY output into the suite logs and programmatically answer prompts (including **checkbox lists** with scrolling and label-based selection).
 
 > Conventions (applies to all components):
 >

@@ -1,6 +1,5 @@
 // suite/components/proc.ts
 import { execa, type Options as ExecaOptions } from 'execa';
-
 import type { Logger } from './logger.ts';
 
 export type SimpleExec = { stdout: string; exitCode: number };
@@ -9,6 +8,23 @@ export type ExecBoxedOptions = ExecaOptions & {
   markStderr?: boolean; // prefix stderr lines with "! "
   windowsHide?: boolean; // default true on Windows
   argsWrapWidth?: number; // optional: wrap args if JSON length > width
+};
+
+export type OpenBoxedOpts = {
+  title?: string; // Box title, default "process"
+  windowsHide?: boolean; // default true
+  cwd?: string;
+  env?: Record<string, string | undefined>;
+};
+
+/**
+ * Represents a running process (minimal wrapper around execa).
+ */
+export type RunningProc = {
+  stdin: NodeJS.WritableStream | null | undefined;
+  stdout: NodeJS.ReadableStream | null | undefined;
+  stderr: NodeJS.ReadableStream | null | undefined;
+  wait: () => Promise<{ exitCode: number }>;
 };
 
 function writeArgs(log: Logger | undefined, args: string[], argsWrapWidth?: number) {
@@ -108,4 +124,84 @@ export async function execBoxed(
   // Guarantee a string `stdout` to callers
   const out = typeof result.stdout === 'string' ? result.stdout : String(result.stdout ?? '');
   return { stdout: out, exitCode: result.exitCode ?? 0 };
+}
+
+/**
+ * openBoxedProcess — spawn a process and (optionally) stream output into a logger box.
+ * - If `log` is provided, opens the box on first output and writes each line; closes with footer.
+ * - Returns a minimal RunningProc so callers can drive stdin and await completion.
+ */
+export function openBoxedProcess(
+  log: Logger | undefined,
+  cmd: string,
+  args: string[] = [],
+  opts: OpenBoxedOpts = {},
+): {
+  proc: RunningProc;
+  closeBox: (exitCode: number) => void;
+} {
+  const { title = 'process', windowsHide = true, cwd, env } = opts;
+
+  let opened = false;
+  const openBoxIfNeeded = () => {
+    if (!log || opened) return;
+    log.boxStart(title);
+    opened = true;
+  };
+
+  const child = execa(cmd, args, {
+    cwd,
+    env,
+    stdin: 'pipe',
+    stdout: 'pipe',
+    stderr: 'pipe',
+    windowsHide,
+  });
+
+  const stripAnsi = (s: string) =>
+    // Basic ANSI escape removal (CSI + some OSC/SS2/SS3 variants)
+    s.replace(
+      // eslint-disable-next-line no-control-regex
+      /\x1B[@-Z\\-_]|\x1B\[[0-?]*[ -/]*[@-~]|\x9B[0-?]*[ -/]*[@-~]|\x1B\][^\x07]*(?:\x07|\x1B\\)/g,
+      '',
+    );
+
+  const onChunk = (chunk: any) => {
+    if (!log) return;
+    openBoxIfNeeded();
+    const s = stripAnsi(String(chunk));
+
+    // Split and drop only a final empty fragment (so repaint bursts don’t spam blanks)
+    const lines = s.split(/\r?\n/);
+    for (let i = 0; i < lines.length; i++) {
+      const isLast = i === lines.length - 1;
+      const line = lines[i];
+      if (isLast && line === '') continue;
+      log.boxLine(line);
+    }
+  };
+
+  child.stdout?.on('data', onChunk);
+  child.stderr?.on('data', onChunk);
+
+  const closeBox = (exitCode: number) => {
+    if (log && opened) log.boxEnd(`exit code: ${exitCode}`);
+  };
+
+  const proc: RunningProc = {
+    stdin: child.stdin,
+    stdout: child.stdout,
+    stderr: child.stderr,
+    wait: async () => {
+      try {
+        const { exitCode } = await child;
+        return { exitCode: exitCode ?? 0 };
+      } catch (e: any) {
+        const code = typeof e?.exitCode === 'number' ? e.exitCode : 1;
+        return { exitCode: code };
+      }
+    },
+  };
+
+  return { proc, closeBox };
 }
