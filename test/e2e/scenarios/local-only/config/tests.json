@@ -1,0 +1,48 @@
+{
+  "describe": "local-only scaffold",
+  "promptMapPath": "test/e2e/scenarios/_runner/prompt-map.json",
+  "manifestPath": "test/e2e/scenarios/local-only/manifest/",
+  "realEnvPath": "test/e2e/scenarios/local-only/.real-env/",
+  "scenarios": [
+    {
+      "it": "silent mode: scaffolds app without errors",
+      "scenarioName": "local-only-silent",
+      "tests": {
+        "assertScaffold": {
+          "flags": ["--silent", "--passport", "local"]
+        },
+        "assertEnv": { "manifest": "env.json" },
+        "mergeEnv": { "env": ".real.env" },
+        "cleanup": true
+      }
+    },
+    {
+      "it": "answers-file mode: scaffolds app without error",
+      "scenarioName": "local-only-answers",
+      "tests": {
+        "assertScaffold": {
+          "flags": [],
+          "answersFile": "test/e2e/scenarios/local-only/config/answers.json"
+        },
+        "assertEnv": { "manifest": "env.json" },
+        "mergeEnv": { "env": ".real.env" },
+        "cleanup": true
+      }
+    },
+    {
+      "it": "interactive mode: scaffolds app without errors (prompts)",
+      "scenarioName": "local-only-interactive",
+      "tests": {
+        "assertScaffold": {
+          "flags": [],
+          "interactive": {
+            "include": ["postgres", "session", { "passport": "local" }]
+          }
+        },
+        "assertEnv": { "manifest": "env.json" },
+        "mergeEnv": { "env": ".real.env" },
+        "cleanup": true
+      }
+    }
+  ]
+}

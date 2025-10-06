@@ -4,16 +4,17 @@
 
 - Automate end-to-end testing of `kickstart-node-app`.
 - Practice app+infra assembly with Docker Desktop + Postgres.
+- Exercise CLI flows (flags, answers file, interactive).
 - Verify:
   - the CLI scaffolds the correct files
   - the scaffolded app starts successfully
-  - core routes (public/protected/auth) behave as expected
+  - (later) core routes (public/protected/auth) behave as expected
 
 ## Non-Goals
 
 - Browser/UI testing.
 - Stress/perf testing.
-- Multi-cloud orchestration; we only target Docker Desktop locally.
+- Multi-cloud orchestration; (we target local Docker Desktop)
 
 ---
 
@@ -24,11 +25,19 @@
   - exposes **suite PG env** via `process.env` as `SUITE_PG_HOST|PORT|USER|PASS`
   - stamps logs with `KNA_LOG_STAMP` and maintains a **suite log** (`logs/<stamp>/suite.log`)
   - cleans up temp apps, test DBs, and the container on teardown
-- **Per-scenario tests** are small and **call typed helpers** in `test/e2e/components/*`.
+- **Scenario runner**: JSON-driven scenarios via `test/e2e/scenarios/_runner/scenario-runner.ts`.
+  - Reads `config/tests.json`
+  - Runs **scaffold** → **assert (unmerged .env)** → (merge step reserved; **skipped** for now)
+  - Uses `prompt-map.json` to expand higher-level `include` → concrete interactive prompts
+  - Manifests and answers files are resolved with deterministic search order; set `E2E_DEBUG_RESOLVE=1` to log candidates
+- **Test helpers**: `test/components/*`
+  - `scaffold-command-assert.ts`, `interactive-driver.ts`, `env-assert.ts`
+  - future: `server-assert.ts`, `fs-assert.ts`
 - **Per-scenario manifests** (expected files/env/routes) live under each scenario folder.
 - **Subprocess handling:** `suite/components/proc.ts` exposes:
   - `execBoxed` for buffered runs (args nicely wrapped, exit code footer).
   - `openBoxedProcess` for streaming/interactive runs (stdin access) with **ANSI stripped** so logs stay readable (e.g., checkbox menus).
+  - `logBox` for generic boxed sections (used by annotated `.env` dumps).
 
 ---
 

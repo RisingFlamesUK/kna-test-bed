@@ -1,0 +1,61 @@
+{
+  "$schema": "./prompt-map.schema.json",
+  "text": [
+    {
+      "key": "postgres",
+      "expect": "Include\\s+PostgreSQL\\?",
+      "sendIfPresent": "y\n",
+      "sendIfAbsent": "n\n"
+    },
+    {
+      "key": "session",
+      "expect": "Enable\\s+session\\s+management\\?",
+      "sendIfPresent": "y\n",
+      "sendIfAbsent": "n\n"
+    },
+    {
+      "key": "axios",
+      "expect": "Include\\s+Axios\\?",
+      "sendIfPresent": "y\n",
+      "sendIfAbsent": "n\n"
+    },
+    {
+      "key": "passport",
+      "expect": "Use\\s+Passport\\.js\\s+authentication\\?",
+      "sendIfPresent": "y\n",
+      "sendIfAbsent": "n\n"
+    }
+  ],
+  "checkbox": [
+    {
+      "key": "passport",
+      "expect": "Select\\s+Passport\\s+strategies",
+      "labelMap": {
+        "local": "local",
+        "google": "google",
+        "microsoft": "microsoft",
+        "bearer": "bearer",
+        "facebook": "facebook",
+        "twitter": "twitter",
+        "linkedin": "linkedin",
+        "steam": "steam",
+        "amazon": "amazon"
+      },
+      "required": true,
+      "maxScroll": 100,
+      "submitDefault": true
+    }
+  ],
+  "sequence": [
+    {
+      "when": "postgres",
+      "steps": [
+        { "expect": "postgres.*user|pg_?user", "send": "\n" },
+        { "expect": "password|pg_?pass", "send": "\n" },
+        { "expect": "database|pg_?db", "send": "\n" },
+        { "expect": "host|pg_?host", "send": "\n" },
+        { "expect": "port|pg_?port", "send": "\n" }
+      ]
+    }
+  ]
+}

@@ -113,35 +113,29 @@ export async function assertScaffoldCommand(opts: ScaffoldCmdOpts): Promise<Scaf
 
   // 5) Run the process
   try {
-    if (isInteractive && opts.interactive) {
-      // Automated interactive path (driven prompts)
-      log.step('Run generator (interactive)');
-      const res = await runInteractive({
-        cmd,
-        args,
-        cwd: process.cwd(),
-        prompts: opts.interactive.prompts,
-        logger: log,
-        logTitle: 'generator output',
-      });
-
-      if (res.exitCode !== 0) {
-        log.fail(
-          `Generator exited with code ${res.exitCode}${
-            res.timedOutAt != null ? ` (timed out at prompt #${res.timedOutAt + 1})` : ''
-          }`,
-        );
-        throw new Error('interactive generator failed');
+    if (isInteractive) {
+      if (opts.interactive?.prompts?.length) {
+        // Programmatic interactive run (CI-friendly): use the driver
+        await runInteractive({
+          cmd,
+          args,
+          cwd: process.cwd(),
+          env: process.env as Record<string, string | undefined>,
+          prompts: opts.interactive.prompts,
+          logger: log,
+          logTitle: 'generator output',
+          windowsHide: true,
+        });
+      } else {
+        // Manual interactive (visible in local terminal)
+        log.write('(interactive/manual) streaming to terminal (no prompts provided)');
+        await execa(cmd, args, { cwd: process.cwd(), stdio: 'inherit' });
       }
-    } else if (isInteractive) {
-      // Manual interactive (visible in local terminal; not recommended for CI)
-      log.write('(interactive) generator output is streaming to the terminal');
-      await execa(cmd, args, { cwd: process.cwd(), stdio: 'inherit' });
     } else {
       // Non-interactive / answers-file / --silent
       await execBoxed(log, cmd, args, {
         title: 'generator output',
-        argsWrapWidth: 100, // tweak to taste (e.g. 120)
+        argsWrapWidth: 100,
       });
     }
 

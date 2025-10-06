@@ -89,6 +89,9 @@ export async function runInteractive(opts: RunInteractiveOpts): Promise<RunInter
   proc.stdout?.on('data', captureStdout);
   proc.stderr?.on('data', captureStderr);
 
+  // Track diagnostics for transparency on timeouts
+  const matchedSummaries: string[] = []; // "Text: /.../ → <sent>"  or  "Checkbox: /.../ → [a, b]"
+
   // Wait until `pattern` appears in outBuf, or timeout.
   const waitFor = (pattern: RegExp, timeoutMs: number) =>
     new Promise<void>((resolve, reject) => {
@@ -153,6 +156,7 @@ export async function runInteractive(opts: RunInteractiveOpts): Promise<RunInter
   async function handleTextPrompt(p: TextPrompt) {
     const timeout = p.timeoutMs ?? 15_000;
     await waitFor(p.expect, timeout);
+    matchedSummaries.push(`Text    : ${String(p.expect)} → ${JSON.stringify(p.send)}`);
     proc.stdin?.write(p.send);
   }
 
@@ -239,6 +243,8 @@ export async function runInteractive(opts: RunInteractiveOpts): Promise<RunInter
       );
     }
 
+    matchedSummaries.push(`Checkbox: ${String(p.expect)} → [${p.select.join(', ')}]`);
+
     // Optionally submit the selection
     if (p.submit !== false) {
       proc.stdin?.write(KEY.enter);
@@ -259,6 +265,40 @@ export async function runInteractive(opts: RunInteractiveOpts): Promise<RunInter
       timedOutAt = i;
       break;
     }
+  }
+
+  // Diagnostics on timeout
+  if (typeof timedOutAt === 'number' && logger) {
+    const expectedNotSeen = prompts
+      .slice(timedOutAt)
+      .map((p, idx) => `#${timedOutAt + idx + 1}: ${String((p as any).expect)}`);
+
+    // Heuristic: lines that look like Inquirer/Prompts (start with '?')
+    const questionLines = Array.from(
+      new Set(
+        outBuf
+          .split(/\r?\n/)
+          .map(stripAnsi)
+          .filter((l) => /^\s*\?\s/.test(l)),
+      ),
+    );
+
+    // Anything in questionLines that doesn't match any expected regex
+    const unmatchedSeen = questionLines.filter(
+      (line) =>
+        !prompts.some((p) => (p as any).expect instanceof RegExp && (p as any).expect.test(line)),
+    );
+
+    logger.write('Prompts expected and responded to:');
+    for (const line of matchedSummaries) logger.write('  - ' + line);
+
+    logger.write('Prompts seen but not expected:');
+    for (const line of unmatchedSeen) logger.write('  - ' + line);
+
+    logger.write('Prompts expected but not seen:');
+    for (const line of expectedNotSeen) logger.write('  - ' + line);
+
+    logger.fail('❌ Scaffold-command-assert timed out.');
   }
 
   const { exitCode } = await proc.wait();

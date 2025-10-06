@@ -1,0 +1,71 @@
+{
+  "$id": "prompt-map.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "kna-test-bed prompt map",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string" },
+    "text": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["key", "expect", "sendIfPresent", "sendIfAbsent"],
+        "properties": {
+          "key": { "type": "string", "minLength": 1 },
+          "expect": { "type": "string", "minLength": 1 },
+          "sendIfPresent": { "type": "string" },
+          "sendIfAbsent": { "type": "string" },
+          "timeoutMs": { "type": "integer", "minimum": 1 }
+        }
+      }
+    },
+    "checkbox": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["key", "expect", "labelMap"],
+        "properties": {
+          "key": { "type": "string", "minLength": 1 },
+          "expect": { "type": "string", "minLength": 1 },
+          "labelMap": {
+            "type": "object",
+            "minProperties": 1,
+            "additionalProperties": { "type": "string" }
+          },
+          "required": { "type": "boolean" },
+          "maxScroll": { "type": "integer", "minimum": 0 },
+          "timeoutMs": { "type": "integer", "minimum": 1 },
+          "submitDefault": { "type": "boolean" }
+        }
+      }
+    },
+    "sequence": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["when", "steps"],
+        "properties": {
+          "when": { "type": "string", "minLength": 1 },
+          "steps": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["expect", "send"],
+              "properties": {
+                "type": { "const": "text" },
+                "expect": { "type": "string", "minLength": 1 },
+                "send": { "type": "string" },
+                "timeoutMs": { "type": "integer", "minimum": 1 }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

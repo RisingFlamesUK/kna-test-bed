@@ -1,6 +1,6 @@
 {
   "name": "kickstart-node-app-testbed",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "",
   "main": "index.js",
   "scripts": {
@@ -12,7 +12,9 @@
     "test": "vitest run",
     "test:e2e": "vitest run test/e2e/suite.test.ts --test-timeout=120000",
     "test:e2e:watch": "vitest --watch test/e2e/suite.test.ts",
-    "prepare": "husky"
+    "prepare": "husky",
+    "ci:validate:prompt-map": "ajv validate --spec=draft2020 -s test/e2e/scenarios/_runner/prompt-map.schema.json -d test/e2e/scenarios/_runner/prompt-map.json --strict=false",
+    "ci:validate:prompt-maps": "ajv validate --spec=draft2020 -s test/e2e/scenarios/_runner/prompt-map.schema.json -d \"test/e2e/**/prompt-map.json\" --strict=false"
   },
   "keywords": [],
   "author": "",
@@ -27,6 +29,8 @@
     "@types/pg": "^8.15.5",
     "@typescript-eslint/eslint-plugin": "^8.45.0",
     "@typescript-eslint/parser": "^8.45.0",
+    "ajv": "^8.17.1",
+    "ajv-cli": "^5.0.0",
     "dotenv": "^17.2.3",
     "eslint": "^9.37.0",
     "eslint-config-prettier": "^9.1.2",
@@ -43,6 +47,7 @@
     "vitest": "^3.2.4"
   },
   "overrides": {
-    "@typescript-eslint/utils": "^8"
+    "@typescript-eslint/utils": "^8",
+    "fast-json-patch": "^3.1.1"
   }
 }

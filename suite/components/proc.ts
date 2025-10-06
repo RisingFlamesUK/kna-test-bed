@@ -205,3 +205,36 @@ export function openBoxedProcess(
 
   return { proc, closeBox };
 }
+
+/**
+ * Write a simple boxed section to the logger.
+ * - `lines`: main content lines
+ * - `legend`: optional lines appended after a spacer
+ * - `width`: optional hard cap (default 120)
+ */
+export function logBox(
+  log: Logger | undefined,
+  title: string,
+  lines: string[],
+  legend?: string[],
+  width = 120,
+): void {
+  if (!log) return;
+
+  const contentWidths = [
+    title.length + 2,
+    ...lines.map((l) => l.length),
+    ...(legend ?? []).map((l) => l.length),
+  ];
+  const w = Math.min(width, Math.max(...contentWidths) + 2);
+
+  const top = `┌─ ${title}${'─'.repeat(Math.max(1, w - (title.length + 2)))}`;
+  log.write(top);
+  for (const l of lines) log.write('│ ' + l);
+  if (legend && legend.length) {
+    log.write('│'); // spacer
+    for (const l of legend) log.write('│ ' + l);
+  }
+  const bottom = `└─ ${'─'.repeat(Math.max(1, w - 2))}`;
+  log.write(bottom);
+}

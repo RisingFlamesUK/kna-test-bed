@@ -1,148 +1,202 @@
 // test/components/env-assert.ts
-import path from 'node:path';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+import type { Logger } from '../../suite/components/logger.ts';
+import { logBox } from '../../suite/components/proc.ts';
 
-import fs from 'fs-extra';
-
-import { scenarioLoggerFromEnv, type Logger } from '../../suite/components/logger.ts';
-
-export type EnvManifest = {
+type ManifestSpec = {
   required?: string[];
   optional?: string[];
+  /** Optional expectations for active (uncommented) key values. */
+  expect?: Record<string, { equals?: string; pattern?: string }>;
 };
 
 type Seen = {
-  uncommented: Set<string>;
+  active: Map<string, string>;
   commented: Set<string>;
 };
 
-function parseDotEnvLines(text: string): Seen {
-  const uncommented = new Set<string>();
+function parseDotEnv(text: string): Seen {
+  const active = new Map<string, string>();
   const commented = new Set<string>();
-  const lines = text.split(/\r?\n/);
 
+  const lines = text.split(/\r?\n/);
   for (const raw of lines) {
     const line = raw.trim();
-
     if (!line) continue;
 
-    // Commented assignment: "# KEY=VALUE" (allow spaces after '#')
-    const mComment = line.match(/^#\s*([A-Za-z_][A-Za-z0-9_]*)\s*=/);
+    // "# KEY=..." (commented assignment)
+    const mComment = line.match(/^#\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/);
     if (mComment) {
       commented.add(mComment[1]);
       continue;
     }
 
-    // Pure comments → ignore
     if (line.startsWith('#')) continue;
 
-    // Active assignment: "KEY=VALUE"
-    const mActive = line.match(/^([A-Za-z_][A-Za-z0-9_]*)\s*=/);
+    // "KEY=VALUE" (active assignment)
+    const mActive = line.match(/^([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/);
     if (mActive) {
-      uncommented.add(mActive[1]);
+      const key = mActive[1];
+      const val = (mActive[2] ?? '').trim();
+      const valClean = val.replace(/\s+#.*$/, ''); // drop trailing inline comments
+      active.set(key, valClean);
     }
   }
-
-  return { uncommented, commented };
+  return { active, commented };
 }
 
-export async function assertEnvMatches({
-  appDir,
-  manifestPath,
-  envFile = '.env',
-  log,
-  scenarioName,
-}: {
+/** Build an annotated version of .env lines for debugging. */
+function buildAnnotatedEnvLines(text: string): string[] {
+  const rawLines = text.split(/\r?\n/);
+
+  // Trim only *trailing* blank lines to avoid a dangling "[·]" at the end.
+  let end = rawLines.length;
+  while (end > 0 && rawLines[end - 1].trim() === '') end--;
+
+  const out: string[] = [];
+  for (let i = 0; i < end; i++) {
+    const raw = rawLines[i];
+    const trimmed = raw.trim();
+
+    if (!trimmed) {
+      out.push('[·]'); // blank line
+      continue;
+    }
+
+    // Commented assignment like: "# KEY=..."
+    if (/^#\s*[A-Za-z_][A-Za-z0-9_]*\s*=/.test(trimmed)) {
+      // Keep the raw line after the marker for readability
+      out.push('[C] ' + raw.replace(/^#\s*/, '# '));
+      continue;
+    }
+
+    // Active assignment like: "KEY=VALUE"
+    if (/^[A-Za-z_][A-Za-z0-9_]*\s*=/.test(trimmed)) {
+      const m = trimmed.match(/^([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/);
+      const key = m?.[1] ?? '';
+      const val = (m?.[2] ?? '').replace(/\s+#.*$/, '');
+      const masked = val === '' ? '(blank)' : '***';
+      out.push(`[A] ${key}=${masked}`);
+      continue;
+    }
+
+    // Plain comment line
+    if (trimmed.startsWith('#')) {
+      out.push('[#] ' + raw);
+      continue;
+    }
+
+    // Anything else (very rare in .env files)
+    out.push('[·] ' + raw);
+  }
+
+  return out;
+}
+
+function loadManifest(p: string): ManifestSpec {
+  const raw = fs.readFileSync(p, 'utf8');
+  return JSON.parse(raw) as ManifestSpec;
+}
+
+export async function assertEnvMatches(opts: {
   appDir: string;
   manifestPath: string;
-  envFile?: string;
   log?: Logger;
-  scenarioName?: string;
 }): Promise<void> {
-  const logger = log ?? (scenarioName ? scenarioLoggerFromEnv(scenarioName) : undefined);
+  const { appDir, manifestPath, log } = opts;
 
-  logger?.step('Env: validate .env against manifest');
-  const absEnv = path.resolve(appDir, envFile);
-  const absManifest = path.resolve(manifestPath);
-  logger?.write(`envFile=${absEnv}`);
-  logger?.write(`manifest=${absManifest}`);
-
-  if (!(await fs.pathExists(absEnv))) {
-    logger?.fail('.env file not found');
-    throw new Error(`.env not found at: ${absEnv}`);
+  const envFile = path.join(appDir, '.env');
+  if (!fs.existsSync(envFile)) {
+    log?.fail(`.env not found at: ${envFile}`);
+    throw new Error('.env missing');
   }
-  if (!(await fs.pathExists(absManifest))) {
-    logger?.fail('Manifest file not found');
-    throw new Error(`env manifest not found at: ${absManifest}`);
+  const envText = fs.readFileSync(envFile, 'utf8');
+  const { active, commented } = parseDotEnv(envText);
+
+  if (!fs.existsSync(manifestPath)) {
+    log?.fail(`Manifest file not found at: ${manifestPath}`);
+    throw new Error('manifest missing');
   }
+  const manifest = loadManifest(manifestPath);
 
-  const [envText, manifest] = await Promise.all([
-    fs.readFile(absEnv, 'utf8'),
-    fs.readJson(absManifest) as Promise<EnvManifest>,
-  ]);
-
-  const { uncommented, commented } = parseDotEnvLines(envText);
   const required = new Set(manifest.required ?? []);
   const optional = new Set(manifest.optional ?? []);
 
-  logger?.write(
-    `manifest: required=${required.size}, optional=${optional.size}; seen: active=${uncommented.size}, commented=${commented.size}`,
+  log?.write(
+    `manifest: required=${required.size}, optional=${optional.size}; seen: active=${active.size}, commented=${commented.size}`,
   );
 
+  // 1) Required must be present as active (value may be blank)
   const missingRequired: string[] = [];
-  const miscommentedRequired: string[] = [];
   for (const key of required) {
-    if (!uncommented.has(key) && !commented.has(key)) {
-      missingRequired.push(key);
-    } else if (commented.has(key) && !uncommented.has(key)) {
-      miscommentedRequired.push(key);
-    }
+    if (!active.has(key)) missingRequired.push(key);
   }
 
+  // 2) Optional must exist but be commented (not active)
   const missingOptional: string[] = [];
-  const misactivatedOptional: string[] = [];
+  const optionalActive: string[] = [];
   for (const key of optional) {
-    if (!commented.has(key) && !uncommented.has(key)) {
-      missingOptional.push(key);
-    } else if (uncommented.has(key)) {
-      misactivatedOptional.push(key);
+    const isCommented = commented.has(key);
+    const isActive = active.has(key);
+    if (!isCommented) missingOptional.push(key);
+    if (isActive) optionalActive.push(key);
+  }
+
+  // 3) Value expectations (only for active keys)
+  const expectFailures: string[] = [];
+  for (const [key, rule] of Object.entries(manifest.expect ?? {})) {
+    if (!active.has(key)) {
+      expectFailures.push(`Expected active key not found: ${key}`);
+      continue;
+    }
+    const actual = active.get(key) ?? '';
+    if (rule.equals !== undefined) {
+      if (actual !== rule.equals) {
+        expectFailures.push(
+          `Value mismatch for ${key}: expected equals ${JSON.stringify(rule.equals)}, got ${JSON.stringify(actual)}`,
+        );
+      }
+    } else if (rule.pattern !== undefined) {
+      let re: RegExp;
+      try {
+        re = new RegExp(rule.pattern);
+      } catch {
+        expectFailures.push(`Invalid regex for ${key}: ${JSON.stringify(rule.pattern)}`);
+        continue;
+      }
+      if (!re.test(actual)) {
+        expectFailures.push(
+          `Value mismatch for ${key}: expected pattern ${String(re)}, got ${JSON.stringify(actual)}`,
+        );
+      }
     }
   }
 
-  if (
-    missingRequired.length ||
-    miscommentedRequired.length ||
-    missingOptional.length ||
-    misactivatedOptional.length
-  ) {
-    logger?.fail('Env assert failed');
-    if (missingRequired.length) {
-      logger?.write('- Missing required   : ' + missingRequired.join(', '));
-    }
-    if (miscommentedRequired.length) {
-      logger?.write('- Required commented : ' + miscommentedRequired.join(', '));
-    }
-    if (missingOptional.length) {
-      logger?.write('- Missing optional   : ' + missingOptional.join(', '));
-    }
-    if (misactivatedOptional.length) {
-      logger?.write('- Optional active    : ' + misactivatedOptional.join(', '));
-    }
+  const hasFailures =
+    missingRequired.length > 0 ||
+    missingOptional.length > 0 ||
+    optionalActive.length > 0 ||
+    expectFailures.length > 0;
 
-    const msg = [
-      `Scaffolded .env at ${absEnv} did not match manifest ${absManifest}:`,
-      missingRequired.length ? `Missing required: ${missingRequired.join(', ')}` : '',
-      miscommentedRequired.length
-        ? `Required present but commented: ${miscommentedRequired.join(', ')}`
-        : '',
-      missingOptional.length ? `Missing optional: ${missingOptional.join(', ')}` : '',
-      misactivatedOptional.length
-        ? `Optional active (should be commented): ${misactivatedOptional.join(', ')}`
-        : '',
-    ]
-      .filter(Boolean)
-      .join('\n');
-    throw new Error(msg);
+  if (hasFailures) {
+    if (missingRequired.length) log?.fail('Missing required   : ' + missingRequired.join(', '));
+    if (missingOptional.length) log?.fail('Optional missing   : ' + missingOptional.join(', '));
+    if (optionalActive.length) log?.fail('Optional active     : ' + optionalActive.join(', '));
+    for (const f of expectFailures) log?.fail(f);
+
+    // Annotated dump to see exactly what the parser saw
+    const annotated = buildAnnotatedEnvLines(envText);
+    logBox(log, 'Scaffolded .env (annotated)', annotated, [
+      'Legend:',
+      ' [A] active assignment',
+      ' [C] commented assignment',
+      ' [#] comment',
+      ' [·] blank/other',
+    ]);
+
+    throw new Error('env assertion failed');
   }
 
-  logger?.pass('Env assert passed');
+  log?.pass('Env assert passed');
 }

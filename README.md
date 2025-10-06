@@ -1,95 +1,97 @@
 # kna-test-bed
 
-End-to-end testbed for the **Kickstart Node App** scaffolder.  
-It spins up Postgres in Docker (once per run), scaffolds example apps, and asserts the generated outputs (e.g. `.env` contents).
+End-to-end testbed for the **Kickstart Node App** scaffolder.
 
----
-
-## Why this exists
-
-- **Reproducible E2E**: exercise the CLI exactly as a user would (flags, answers file, interactive).
-- **Tight logging**: each run writes structured logs under `logs/<STAMP>/…` with numbered steps.
-- **Safe**: the test harness is self-cleaning (temp app dirs, containers).
-
----
-
-## Prerequisites
-
-- **Node.js** ≥ 18 and npm
-- **Docker** (CLI + daemon)
-  - If Docker isn’t running, the suite logs will show a friendly error and tests that need PG will be skipped/fail clearly.
+- Spins up Postgres in Docker (once per run)
+- Runs scaffold flows (**silent**, **answers-file**, **interactive**)
+- Asserts the generated outputs (e.g., `.env` contents)
+- Writes step-by-step logs under `logs/<STAMP>/…`
 
 ---
 
 ## Quick start
 
 ```bash
-npm install
-npm run test
+# install deps
+npm i
+
+# run the whole e2e suite (docker + sample sanity + scenarios + schema checks)
+npm run test:e2e
+
+# watch the suite during development
+npm run test:e2e:watch
 ```
 
-You’ll see a clickable log root printed in the terminal, e.g.
+Logs go to `logs/<STAMP>/…`:
 
-```
-📝 Logs for this run: logs/2025-10-03T12-34-56-789Z
-```
-
-- Per-scenario logs live at `logs/<STAMP>/e2e/*.log`.
-- The suite log (Docker/PG lifecycle + test summaries) is `logs/<STAMP>/suite.log`.
+- `suite.log`: suite setup/teardown (Docker, PG, env)
+- per-scenario logs (e.g., `local-only-silent.log`, `local-only-answers.log`, `local-only-interactive.log`)
+- meta checks (e.g., `prompt-map.schema.log`, `suite-sentinel.log`)
 
 ---
 
-## What gets tested (initial focus)
+## Scenario runner (JSON-driven tests)
 
-- **Scaffold: local-only**
-  - Flags mode: `--silent --passport local`
-  - Answers-file mode: `{"passport":"local","port":4001}`
-- **.env assert**
-  - Confirms every key listed in the manifest exists in the generated `.env`
-  - `required` keys are **active** (not commented)
-  - `optional` keys are **commented**
+Each scenario folder (e.g., `test/e2e/scenarios/local-only/`) provides a `config/tests.json` that describes what to run. The test file:
 
-> OAuth client details are not injected by flags or answers file right now—tests that need them write to `.env` after scaffolding.
+```ts
+// test/e2e/scenarios/local-only/local-only.test.ts
+import { runScenariosFromFile } from '../_runner/scenario-runner.ts';
 
----
+const CONFIG_PATH =
+  process.env.SCENARIO_CONFIG ?? 'test/e2e/scenarios/local-only/config/tests.json';
 
-## Logs you’ll see
-
-- `suite.log`  
-  Docker/PG availability, image checks, container run, health/port checks, published env, and a per-file test summary.
-- `e2e/<scenario>.log`  
-  Precise CLI invocation, boxed generator output, and per-step assertions (e.g., `.env` validation).
-
-Boxed blocks look like:
-
-```
-┌─ generator output ─────────────────────────────────────────
-│ …scaffolder logs here…
-└─ exit code: 0 ─────────────────────────────────────────────
+await runScenariosFromFile(CONFIG_PATH);
 ```
 
----
+Key points:
 
-## Conventions (short)
+- We **assert the unmerged `.env`** first (verifies scaffolder output).
+- `mergeEnv` is **present in JSON** but **intentionally ignored** by the runner for now (we’ll spec it next).
+- Interactive scenarios can be driven by:
+  - Low-level `prompts: Prompt[]`, or
+  - A higher-level `include` list resolved via a **prompt-map** JSON.
 
-- Step headers are **left-justified**: `N) Title`
-- Details are indented under the step
-- We visually separate our logs from subprocess output with **boxed** sections
-- Logs are **append-only** per run and numbered for continuity across components
-
----
-
-## Troubleshooting
-
-- **Docker not running**  
-  `suite.log` will show:  
-  `❌ Docker CLI not found or daemon not running. Start Docker Desktop/daemon and try again.`
-
-- **PG env missing in tests**  
-  `suite.sentinel.log` will explain which `SUITE_PG_*` keys were missing and point you to `suite.log` for the root cause.
+See **[`docs/scenarios.md`](./docs/scenarios.md)** for the JSON formats (tests.json, prompt-map.json), schema validation, and examples.
 
 ---
 
-## License
+## Components reference
 
-MIT
+The detailed API for suite and test components lives in **[`docs/components.md`](./docs/components.md)**.
+
+Highlights:
+
+- `suite/components/proc.ts` now includes `logBox()` for consistent boxed sections in logs.
+- `test/components/env-assert.ts` enforces:
+  - `required` keys: active (uncommented)
+  - `optional` keys: present but commented
+  - optional value checks via `expect`
+  - on failure: **boxed annotated** `.env` dump with a legend
+- `test/components/interactive-driver.ts`:
+  - text + checkbox prompts
+  - strong diagnostics on timeout
+- `test/components/scaffold-command-assert.ts`:
+  - interactive mode uses the driver when prompts are provided
+
+---
+
+## CI helpers
+
+```bash
+# Validate a single prompt-map against the schema
+npm run ci:validate:prompt-map
+
+# Validate all prompt-maps
+npm run ci:validate:prompt-maps
+```
+
+We use `--spec=draft2020` for AJV.
+
+---
+
+## Conventions
+
+- TypeScript everywhere; avoid arbitrary sleeps; prefer readiness checks.
+- Structured logs via `logger.ts` (`step/pass/fail`) and boxed sections via `proc.ts`.
+- Keep exports lean; add features in crisp, incremental PRs.
