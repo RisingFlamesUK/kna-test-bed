@@ -14,8 +14,16 @@
     "allowImportingTsExtensions": true,
 
     "resolveJsonModule": true,
-    "types": ["node", "vitest/globals"]
+
+    "types": ["node"],
+    "typeRoots": ["./suite/types/ambient", "./node_modules/@types"]
   },
-  "include": ["suite/**/*.ts", "test/**/*.ts", "vitest.config.ts"],
+  "include": [
+    "suite/**/*.ts",
+    "suite/**/*.d.ts",
+    "test/**/*.ts",
+    "test/**/*.d.ts",
+    "vitest.config.ts"
+  ],
   "exclude": ["node_modules", "dist", ".tmp", ".artifacts", "logs"]
 }

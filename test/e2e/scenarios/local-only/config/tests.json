@@ -12,6 +12,7 @@
           "flags": ["--silent", "--passport", "local"]
         },
         "assertEnv": { "manifest": "env.json" },
+        "assertFiles": { "manifest": "files.json" },
         "mergeEnv": { "env": ".real.env" },
         "cleanup": true
       }
@@ -25,6 +26,7 @@
           "answersFile": "test/e2e/scenarios/local-only/config/answers.json"
         },
         "assertEnv": { "manifest": "env.json" },
+        "assertFiles": { "manifest": "files.json" },
         "mergeEnv": { "env": ".real.env" },
         "cleanup": true
       }
@@ -40,6 +42,7 @@
           }
         },
         "assertEnv": { "manifest": "env.json" },
+        "assertFiles": { "manifest": "files.json" },
         "mergeEnv": { "env": ".real.env" },
         "cleanup": true
       }

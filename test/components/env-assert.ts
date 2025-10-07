@@ -1,7 +1,7 @@
 // test/components/env-assert.ts
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import type { Logger } from '../../suite/components/logger.ts';
+import type { Logger } from '../../suite/types/logger.ts';
 import { logBox } from '../../suite/components/proc.ts';
 
 type ManifestSpec = {

@@ -1,5 +1,5 @@
 // test/components/interactive-driver.ts
-import type { Logger } from '../../suite/components/logger.ts';
+import type { Logger } from '../../suite/types/logger.ts';
 import { openBoxedProcess } from '../../suite/components/proc.ts';
 
 const KEY = {

@@ -29,5 +29,7 @@
     "views/partials/footer.ejs",
     "views/partials/header.ejs",
     "views/register.ejs"
-  ]
+  ],
+  "forbidden": [],
+  "ignore": ["node_modules/**", ".git/**"]
 }

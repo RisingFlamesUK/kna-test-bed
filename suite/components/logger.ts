@@ -1,25 +1,7 @@
 // suite/components/logger.ts
 import path from 'path';
-
+import { type Logger } from '../types/logger.ts';
 import fs from 'fs-extra';
-
-export type Logger = {
-  filePath: string;
-  step: (title: string, details?: string, indent?: number | string) => void;
-  pass: (msg?: string, indent?: number | string) => void;
-  fail: (msg: string, indent?: number | string) => void;
-  write: (line: string, indent?: number | string) => void;
-  /** Draw the top rule with a label, e.g. "┌─ generator output ─────" */
-  boxStart: (title: string, opts?: { width?: number; indent?: number | string }) => void;
-  /** Write a body line with "│ " prefix. Handles multi-line input. Empty line => "│" */
-  boxLine: (line: string, opts?: { width?: number; indent?: number | string }) => void;
-  /** Draw the bottom rule with a label, e.g. "└─ exit code: 0 ───────" */
-  boxEnd: (
-    label: string,
-    opts?: { width?: number; indent?: number | string; suffix?: string },
-  ) => void;
-  close: () => Promise<void>;
-};
 
 function _indentToString(ind?: number | string): string {
   if (ind == null) return '';
@@ -46,6 +28,7 @@ export function withIndent(base: Logger, indent: number | string): Logger {
 
     // Success/failure/write with default indent applied unless caller overrides.
     pass: (msg, _ind) => base.pass(msg, _ind ?? pad),
+    warn: (msg, _ind) => base.warn(msg, _ind ?? pad),
     fail: (msg, _ind) => base.fail(msg, _ind ?? pad),
     write: (line, _ind) => base.write(line, _ind ?? pad),
 
@@ -138,6 +121,9 @@ export function createLogger(filePath: string): Logger {
   const pass = (msg = 'PASS', indent?: number | string) =>
     append(`${_resolveIndent(indent, '   ')}✅ ${msg}`); // default 3
 
+  const warn = (msg = 'WARN', indent?: number | string) =>
+    append(`${_resolveIndent(indent, '   ')}⚠️ ${msg}`); // default 3
+
   const fail = (msg: string, indent?: number | string) =>
     append(`${_resolveIndent(indent, '   ')}❌ ${msg}`); // default 3
 
@@ -193,6 +179,7 @@ export function createLogger(filePath: string): Logger {
     step,
     pass,
     fail,
+    warn,
     write,
     boxStart,
     boxLine,

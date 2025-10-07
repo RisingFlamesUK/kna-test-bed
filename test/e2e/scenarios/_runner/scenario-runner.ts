@@ -9,6 +9,7 @@ import { assertScaffoldCommand } from '../../../components/scaffold-command-asse
 import { assertEnvMatches } from '../../../components/env-assert.ts';
 import type { ScenarioConfigFile, ScenarioEntry, PromptMap } from './types.ts';
 import type { Prompt } from '../../../components/interactive-driver.ts';
+import { assertFiles } from '../../../components/fs-assert.ts';
 
 type ResolveCtx = {
   configDir: string;
@@ -99,7 +100,7 @@ function defineScenario(entry: ScenarioEntry, ctx: ResolveCtx) {
       try {
         expect(Boolean(appDir)).toBe(true);
 
-        // 2) Env assertions (ALWAYS run on the UNMERGED .env to verify scaffolder output)
+        // 2a) Env assertions (ALWAYS run on the UNMERGED .env to verify scaffolder output)
         if (entry.tests.assertEnv?.manifest) {
           const manifestPath = resolveWithBasesVerbose(
             entry.tests.assertEnv.manifest,
@@ -108,17 +109,34 @@ function defineScenario(entry: ScenarioEntry, ctx: ResolveCtx) {
           );
 
           const envFile = path.join(appDir, '.env');
-          log.step(
-            `Env: validate .env against manifest\n  envFile=${envFile}\n  manifest=${manifestPath}`,
-          );
+          log.step(`Env: validate .env against manifest`);
+          log.write(`envFile=${envFile}`);
+          log.write(`manifest=${manifestPath}`);
 
           await assertEnvMatches({ appDir, manifestPath, log });
         }
 
+        // 2b) Filesystem assertions (required/forbidden paths via manifest)
+        if (entry.tests.assertFiles?.manifest) {
+          const filesManifestPath = resolveWithBasesVerbose(
+            entry.tests.assertFiles.manifest,
+            orderManifestBases(ctx),
+            { kind: 'manifest', log },
+          );
+
+          await assertFiles({
+            cwd: appDir,
+            manifest: JSON.parse(await readFile(filesManifestPath, 'utf8')),
+            manifestLabel: filesManifestPath,
+            scenarioName: entry.scenarioName,
+            logger: log,
+          });
+        }
+
         // 3) Merge step — intentionally NOT IMPLEMENTED yet (placeholder)
         if (entry.tests.mergeEnv?.env) {
-          log.write(
-            `mergeEnv present in config (env="${entry.tests.mergeEnv.env}") — skipping (not implemented by runner)`,
+          log.step(
+            `Merge: mergeEnv present in config (env="${entry.tests.mergeEnv.env}") — skipping (not implemented by runner)`,
           );
         }
       } finally {
@@ -275,10 +293,6 @@ function orderManifestBases(ctx: ResolveCtx) {
     ],
   };
 }
-
-// function orderRealEnvBases(ctx: ResolveCtx) {
-//   return { prefer: ctx.realEnvBase, fallbacks: [ctx.callerDir, ctx.configDir, process.cwd()] };
-// }
 
 function orderAnswersBases(ctx: ResolveCtx) {
   return { prefer: ctx.answersBase, fallbacks: [ctx.callerDir, ctx.configDir, process.cwd()] };

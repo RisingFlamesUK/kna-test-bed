@@ -193,3 +193,16 @@ Interactive scenarios are driven by **`test/components/interactive-driver.ts`**,
 > - TypeScript everywhere; no sleeps; prefer readiness checks (Docker health + TCP).
 > - Structured logs via `logger.ts` with `step/pass/fail`.
 > - Keep exports lean; internal helpers stay unexported unless real scenarios need them.
+
+---
+
+## Assertion order
+
+- **Scaffold** the app (silent / answers-file / interactive).
+- **Assert `.env`** (always on the **unmerged** file).
+- **Assert filesystem** via `manifest/files.json`:
+  - **FAIL** on any missing required patterns or forbidden matches.
+  - **WARN** on unexpected files (neither required nor forbidden), especially when `node_modules/**` and `.git/**` are ignored.
+- (Merge step reserved for later.)
+
+> Logging: filesystem results are summarized with compact counters and boxed lists (only when non-zero), e.g. **Missing files**, **Forbidden files found**, **Unexpected files found**.

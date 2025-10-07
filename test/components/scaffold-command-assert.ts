@@ -9,8 +9,8 @@ import {
   scenarioLoggerFromEnv,
   sanitizeLogName,
   makeLogStamp,
-  type Logger,
 } from '../../suite/components/logger.ts';
+import { type Logger } from '../../suite/types/logger.ts';
 import { execBoxed } from '../../suite/components/proc.ts';
 import { runInteractive, Prompt } from './interactive-driver.ts';
 

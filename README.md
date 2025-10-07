@@ -90,6 +90,14 @@ We use `--spec=draft2020` for AJV.
 
 ---
 
+## New in v0.4.0
+
+- **Filesystem assertions (Phase 1):** per-scenario `manifest/files.json` with `required`, `forbidden`, and `ignore` patterns.
+  - Results can be **OK**, **WARN** (unexpected files), or **FAIL** (missing/forbidden).
+  - See: [`docs/scenarios.md`](docs/scenarios.md#filesjson-filesystem-manifest) and [`docs/components.md`](docs/components.md#testcomponentsfs-assertts).
+
+---
+
 ## Conventions
 
 - TypeScript everywhere; avoid arbitrary sleeps; prefer readiness checks.

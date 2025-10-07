@@ -1,6 +1,6 @@
 // suite/components/proc.ts
 import { execa, type Options as ExecaOptions } from 'execa';
-import type { Logger } from './logger.ts';
+import type { Logger } from '../types/logger.ts';
 
 export type SimpleExec = { stdout: string; exitCode: number };
 export type ExecBoxedOptions = ExecaOptions & {
@@ -237,4 +237,19 @@ export function logBox(
   }
   const bottom = `└─ ${'─'.repeat(Math.max(1, w - 2))}`;
   log.write(bottom);
+}
+
+export function logBoxCount(
+  log: Logger | undefined,
+  title: string,
+  lines: string[],
+  footerLabel: string,
+  opts?: { width?: number; indent?: number | string },
+): void {
+  if (!log) return;
+  const width = opts?.width ?? 78;
+
+  log.boxStart(title, { width, indent: opts?.indent });
+  for (const l of lines) log.boxLine(l, { width, indent: opts?.indent });
+  log.boxEnd(footerLabel, { width, indent: opts?.indent });
 }

@@ -20,7 +20,7 @@ directory_tree.json
 
 # under development
 local+google/
-test/e2e/scenarios/local-only/config/test.json
+ToDo.md
 
 ############################
 # Node setings from GitHub #

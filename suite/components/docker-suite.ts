@@ -4,7 +4,7 @@ import * as crypto from 'node:crypto';
 
 import { execa } from 'execa';
 
-import type { Logger } from './logger.ts';
+import type { Logger } from '../types/logger.ts';
 import { execBoxed, type SimpleExec } from './proc.ts';
 
 let _dockerEnsured = false;

@@ -5,7 +5,7 @@ import * as crypto from 'node:crypto';
 
 import { Client } from 'pg';
 
-import type { Logger } from './logger.ts';
+import type { Logger } from '../types/logger.ts';
 import { runContainer, waitForTcp, waitForHealthy, removeByLabel } from './docker-suite.ts';
 import { KNA_LABEL } from './constants.ts';
 import type { PgEnv } from './pg-env.ts';

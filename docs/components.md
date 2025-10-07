@@ -28,7 +28,7 @@
 
 - Planned Components
   - [`test/components/server-assert.ts`](#testcomponentsserver-assertts-planned)
-  - [`test/components/fs-assert.ts`](#testcomponentsfs-assertts-planned)
+  - [`test/components/fs-assert.ts`](#testcomponentsfs-assertts)
   - [`test/components/http-assert.ts`](#testcomponentshttp-assertts-planned)
   - [`test/components/env-update.ts`](#testcomponentsenv-updatets-planned)
   - [`test/components/pg-assert.ts`](#testcomponentspg-assertts-planned)
@@ -82,12 +82,12 @@ Structured, append-only logging with steps and boxed sections. Path builders + s
 
 **At a glance**
 
-| Capability      | Notes                                                                    |
-| --------------- | ------------------------------------------------------------------------ |
-| Steps           | `step()`, `pass()`, `fail()`, `write()` with indent controls             |
-| Boxes           | `boxStart/boxLine/boxEnd` for aligned subprocess output                  |
-| Paths           | `buildLogRoot`, `buildSuiteLogPath`, `buildScenarioLogPath`              |
-| Scenario logger | `scenarioLoggerFromEnv` requires `KNA_LOG_STAMP` (set by `global-setup`) |
+| Capability      | Notes                                                                      |
+| --------------- | -------------------------------------------------------------------------- |
+| Steps           | `step()`, `pass()`, `**warn()**`, `fail()`, `write()` with indent controls |
+| Boxes           | `boxStart/boxLine/boxEnd` for aligned subprocess output                    |
+| Paths           | `buildLogRoot`, `buildSuiteLogPath`, `buildScenarioLogPath`                |
+| Scenario logger | `scenarioLoggerFromEnv` requires `KNA_LOG_STAMP` (set by `global-setup`)   |
 
 **Exports**
 
@@ -96,6 +96,7 @@ export type Logger = {
   filePath: string;
   step: (title: string, details?: string, indent?: number | string) => void;
   pass: (msg?: string, indent?: number | string) => void;
+  warn: (msg: string, indent?: number | string) => void;
   fail: (msg: string, indent?: number | string) => void;
   write: (line: string, indent?: number | string) => void;
 
@@ -131,7 +132,7 @@ Outputs log files under `logs/<STAMP>/**`.
 
 **Behavior & details**
 
-- Monotonic steps; stable indentation.
+- Monotonic steps; stable indentation; **pass** prefixes `✅`; **`warn()`** prefixes `⚠️`; **fail** prefixes `❌`.
 - Boxes draw clean frames; safe for mixed stdout/stderr content.
 
 **Error behavior**  
@@ -148,26 +149,24 @@ Unified subprocess execution and streaming with **boxed logging** and ANSI-safe 
 
 **At a glance**
 
-| Mode              | API                | Use when…                                          |
-| ----------------- | ------------------ | -------------------------------------------------- |
-| Buffered          | `execBoxed`        | Capture stdout and log a tidy boxed transcript     |
-| Streaming/Tty     | `openBoxedProcess` | You need stdin + live output (interactive flows)   |
-| Boxed blob writer | `logBox`           | Print a custom boxed block (e.g. annotated `.env`) |
+| Mode/Helper       | API                | Use when…                                           |
+| ----------------- | ------------------ | --------------------------------------------------- |
+| Buffered          | `execBoxed`        | Capture stdout and log a tidy boxed transcript      |
+| Streaming/Tty     | `openBoxedProcess` | You need stdin + live output (interactive flows)    |
+| Boxed blob writer | `logBox`           | Print a custom boxed block (e.g., annotated `.env`) |
+| Boxed list+footer | `logBoxCount`      | Lists with a bottom label like `└─ 10 files ─`      |
 
 **Exports**
 
 ```ts
-import type { Logger } from './logger.ts';
-import type { Options as ExecaOptions } from 'execa';
-
 export type SimpleExec = { stdout: string; exitCode: number };
 
-export type ExecBoxedOptions = ExecaOptions & {
+export type ExecBoxedOptions = {
   title?: string;
   markStderr?: boolean;
   windowsHide?: boolean;
   argsWrapWidth?: number;
-};
+} & import('execa').Options;
 
 export type OpenBoxedOpts = {
   title?: string;
@@ -204,6 +203,15 @@ export function logBox(
   lines: string[],
   legend?: string[],
   width?: number,
+): void;
+
+/** Box helper for lists with a bottom label (house style). */
+export function logBoxCount(
+  log: Logger | undefined,
+  title: string,
+  lines: string[],
+  footerLabel: string,
+  opts?: { width?: number; indent?: number | string },
 ): void;
 ```
 
@@ -843,47 +851,68 @@ Timeouts and non-2xx codes throw with clear diagnostics.
 
 ---
 
-## test/components/fs-assert.ts (Planned)
+## test/components/fs-assert.ts
 
-**Status:** Planned
+**Status:** Implemented
 
 **Purpose**  
-Assert presence/absence and (optionally) content hashes for files.
+Assert filesystem layout of the scaffolded app using a per-scenario manifest.
 
 **At a glance**
 
-| Feature         | Notes                              |
-| --------------- | ---------------------------------- |
-| Existence       | `required` / `forbidden` paths     |
-| Hash (optional) | SHA-256 checks per file (optional) |
+| Feature    | Notes                                                                                        |
+| ---------- | -------------------------------------------------------------------------------------------- |
+| Required   | `required` patterns — **each pattern must match ≥ 1 file** (case-insensitive)                |
+| Forbidden  | `forbidden` patterns — any match is a **breach**                                             |
+| Ignore     | `ignore` patterns — removed from consideration (but still counted in the total “discovered”) |
+| Unexpected | Files that are neither required nor forbidden (post-ignore)                                  |
+| Severity   | **FAIL** on any `missing` or `breach` • **WARN** on `unexpected>0` • **OK** otherwise        |
+| Boxes      | Uses `proc.logBoxCount()` to print compact lists with bottom labels                          |
+| Debug      | Set `E2E_DEBUG_FS_ASSERT=1` to add a capped “context” box                                    |
 
-**Exports (proposed)**
+**Exports**
 
 ```ts
-export type FilesManifest = {
-  required?: string[];
-  forbidden?: string[];
-  sha256?: Record<string, string>;
-};
-
-export async function assertFiles(
-  appDir: string,
-  manifest: FilesManifest,
-  log?: import('../../suite/components/logger.ts').Logger,
-): Promise<void>;
+export async function assertFiles(opts: {
+  cwd: string; // sandbox root
+  manifest: import('../../suite/types/fs-assert.ts').AssertFilesManifestV1;
+  logger: import('../../suite/types/logger.ts').Logger;
+  manifestLabel?: string; // shown in the header for clarity
+  scenarioName?: string; // updates per-scenario status sentinel
+}): Promise<void>;
 ```
 
 **Inputs/Outputs**  
-Reads file system; logs diffs; throws on mismatch.
+Reads the sandbox under `cwd`. Logs:
+
+- Header: step title + aligned `cwd=` and `manifest=`.
+- Summaries:
+  - `Scaffolded output: <N> files discovered`
+  - `- Required Files Test (<R> required): <S> satisfied, <M> missing`
+  - `- Forbidden Files Test (<F> forbidden): Outcome: <B> breach`
+  - `- Other Files Found: <U> unexpected, <I> ignored`
+- Boxes (only when non-zero): **Missing files** / **Forbidden files found** / **Unexpected files found**.
 
 **Dependencies**  
-`fs-extra`, `crypto`, `path`
+`fs`, `path`, `picomatch`, `suite/components/proc.ts` (`logBoxCount`), `suite/types/logger.ts`
 
-**Behavior & details**  
-Normalizes path separators for cross-platform runs.
+**Behavior & details**
+
+- `discovered = all files under cwd (including ignored)`.
+- `considered = discovered − ignored`.
+- `presentFiles = ∪ matches of required patterns over considered (case-insensitive)`.
+- `missing = count(required patterns with 0 matches)`.
+- `breach = ∪ matches of forbidden patterns over considered`.
+- `unexpected = considered − (presentFiles ∪ breach)`.
+- Final line **last**: `❌ FAIL` (throws), `⚠️ WARN`, or `✅ OK`.
 
 **Error behavior**  
-Throws with detailed lists on mismatch; prints boxed summary.
+Throws on **FAIL** (any missing or breach). **WARN** does not throw.
+
+**Notes**
+
+- The runner calls this **after** `.env` assertion and **before** any future merge step.
+- Per-scenario status is recorded internally for later suite summaries.
 
 ---
 

@@ -1,23 +1,34 @@
 # Scenarios — JSON formats and runner
 
-This doc explains the JSON configs driving scenario tests: **tests.json**, **prompt-map.json**, and the **answers.json** used by the scaffolder.
+This doc explains the JSON configs driving scenario tests: **tests.json**, **prompt-map.json**, the **answers.json** used by the scaffolder, and the **files.json** used by file assertions.
 
 ---
 
 ## Index
 
 - [tests.json](#testsjson)
+  - [Example (tests.json)](#example-testsjson)
   - [Fields](#fields)
   - [Path resolution (summary)](#path-resolution-summary)
 - [prompt-map.json](#prompt-mapjson)
-  - [Example](#example)
+  - [Example (prompt-map.json)](#example-prompt-mapjson)
   - [Validate](#validate)
 - [answers.json](#answersjson)
+  - [Reference](#reference)
+- [files.json (filesystem manifest)](#filesjson-filesystem-manifest)
+  - [Example (files.json)](#example-filesjson)
+  - [Patterns & matching guide](#patterns--matching-guide)
+  - [Semantics](#semantics)
+  - [Outcome](#outcome)
+  - [Path resolution](#path-resolution)
 - [Best practices](#best-practices)
+  - [Example (best practices)](#example-best-practices)
 
 ---
 
 ## `tests.json`
+
+### Example (tests.json)
 
 The per-scenario test list. Example:
 
@@ -34,6 +45,7 @@ The per-scenario test list. Example:
       "tests": {
         "assertScaffold": { "flags": ["--silent", "--passport", "local"] },
         "assertEnv": { "manifest": "env.json" },
+        "assertFiles": { "manifest": "files.json" },
         "mergeEnv": { "env": ".real.env" },
         "cleanup": true
       }
@@ -47,6 +59,7 @@ The per-scenario test list. Example:
           "answersFile": "test/e2e/scenarios/local-only/config/answers.json"
         },
         "assertEnv": { "manifest": "env.json" },
+        "assertFiles": { "manifest": "files.json" },
         "mergeEnv": { "env": ".real.env" },
         "cleanup": true
       }
@@ -62,6 +75,7 @@ The per-scenario test list. Example:
           }
         },
         "assertEnv": { "manifest": "env.json" },
+        "assertFiles": { "manifest": "files.json" },
         "mergeEnv": { "env": ".real.env" },
         "cleanup": true
       }
@@ -74,11 +88,11 @@ The per-scenario test list. Example:
 
 - `describe` (string): suite title.
 - `promptMapPath` (string, optional): path to `prompt-map.json` (see below).
-- `manifestPath` (string, optional): base dir for env manifests.
-- `realEnvPath`, `answersBasePath` (strings, optional): bases for resolution (future convenience).
+- `manifestPath` (string, optional): base dir for manifests (e.g., `env.json`, `files.json`).
+- `realEnvPath`, `answersBasePath` (strings, optional): bases for resolution.
 - `scenarios` (array): list of entries.
 
-Scenario entry:
+Scenario entry shape:
 
 ```ts
 type ScenarioEntry = {
@@ -103,13 +117,20 @@ type ScenarioEntry = {
         include?: Array<string | Record<string, string>>;
       };
     };
+
     // Runs on UNMERGED .env
     assertEnv?: {
       manifest: string;
+      // optional expectations on active keys: equals/pattern
       expect?: Record<string, { equals?: string; pattern?: string }>;
     };
+
+    // Required/forbidden/ignore files manifest
+    assertFiles?: { manifest: string };
+
     // Reserved (ignored by runner for now)
     mergeEnv?: { env: string };
+
     cleanup?: boolean;
   };
 };
@@ -117,9 +138,9 @@ type ScenarioEntry = {
 
 ### Path resolution (summary)
 
-- **Manifests** (e.g., `"env.json"`):
+- **Manifests** (e.g., `"env.json"`, `"files.json"`):
   1. `<scenario test dir>/manifest/<file>`
-  2. `<scenario root>/manifest/<file>` (if config is under `<scenario>/config`)
+  2. `<scenario root>/manifest/<file>` (if `tests.json` is under `<scenario>/config`)
   3. `<config dir>/manifest/<file>`
   4. `manifestPath` override (from `tests.json`)
   5. `<callerDir>`, `<configDir>`, CWD (fallbacks)
@@ -135,9 +156,9 @@ Set `E2E_DEBUG_RESOLVE=1` to log candidates and the chosen path.
 Maps higher-level `include` tokens → concrete interactive prompts.
 
 - `$schema` supported: `./prompt-map.schema.json`
-- Validated in CI using `ajv` (JSON Schema 2020-12).
+- Validated in CI (AJV, JSON Schema 2020-12).
 
-### Example
+### Example (prompt-map.json)
 
 ```json
 {
@@ -154,18 +175,6 @@ Maps higher-level `include` tokens → concrete interactive prompts.
       "expect": "Enable\\s+session\\s+management\\?",
       "sendIfPresent": "y\n",
       "sendIfAbsent": "n\n"
-    },
-    {
-      "key": "axios",
-      "expect": "Include\\s+Axios\\?",
-      "sendIfPresent": "y\n",
-      "sendIfAbsent": "n\n"
-    },
-    {
-      "key": "passport-enable",
-      "expect": "Use\\s+Passport\\.js\\s+authentication\\?",
-      "sendIfPresent": "y\n",
-      "sendIfAbsent": "n\n"
     }
   ],
   "checkbox": [
@@ -174,10 +183,152 @@ Maps higher-level `include` tokens → concrete interactive prompts.
       "expect": "Select\\s+Passport\\s+strategies",
       "labelMap": {
         "local": "local",
-        "bearer": "bearer",
-        "google": "google",
-        "facebook": "facebook",
-        "twitter": "twitter",
-        "microsoft": "microsoft",
-        "linkedin": "linkedin"
+        "google": "google"
+      },
+      "required": true,
+      "maxScroll": 200
+    }
+  ],
+  "sequence": [
+    {
+      "when": "Use\\s+Passport\\.js\\s+authentication\\?",
+      "steps": [{ "type": "text", "expect": "Use\\s+Passport.*\\?", "send": "y\n" }]
+    }
+  ]
+}
+```
+
+### Validate
+
+- Schema: `test/e2e/scenarios/_runner/prompt-map.schema.json`
+- Test: `test/e2e/scenarios/_runner/prompt-map.schema.test.ts`
+- Run: `npx vitest` (schema validation runs as part of the test suite)
+
+---
+
+## `answers.json`
+
+### Reference
+
+The answers file format is **owned by the scaffolder**. For the most accurate and up-to-date schema and examples, refer to the **Kickstart Node App** README in the scaffolder repository for the version you are testing.
+
+- Tests reference the file via `tests.assertScaffold.answersFile` in `tests.json`.
+- Path resolution in the runner prefers `answersBasePath` (when provided), then falls back to `<callerDir>`, `<configDir>`, and `CWD` (see [Path resolution (summary)](#path-resolution-summary)).
+- Keep answers **deterministic and minimal** to reduce flaky diffs.
+
+## files.json (filesystem manifest)
+
+### Example (files.json)
+
+```json
+{
+  "required": [".env", "README.md", "public/**"],
+  "forbidden": ["secrets.*", "tmp/**"],
+  "ignore": ["node_modules/**", ".git/**"]
+}
+```
+
+### Patterns & matching guide
+
+**Engine & flags**  
+Matching uses `picomatch` with `{ dot: true, nocase: true }`.
+
+- **Case-insensitive**: patterns match ignoring case.
+- **Dotfiles included**: names starting with `.` are considered.
+- **POSIX paths in manifests**: use forward slashes (`/`). The runner normalizes at runtime.
+
+**Common globs**
+
+| Pattern          | Matches                                        |
+| ---------------- | ---------------------------------------------- | ----------------------------------------- |
+| `*.js`           | Any `.js` file in the current tree level       |
+| `**/*.js`        | Any `.js` file in any subdirectory (recursive) |
+| `public/**`      | Everything under `public/` (files and folders) |
+| `views/*.ejs`    | `.ejs` files directly under `views/`           |
+| `views/**/*.ejs` | `.ejs` files anywhere under `views/`           |
+| `README.*`       | `README.md`, `README.txt`, etc.                |
+| `config/@(db     | pg).js`                                        | Extglob: `config/db.js` or `config/pg.js` |
+| `!(tmp)/**`      | Extglob: everything except under `tmp/`        |
+
+> Extglobs like `@(a|b)` and `!(x)` are supported by picomatch.
+
+**Force exact matches**
+
+- For an **exact file**, avoid glob characters:
+  - Exact: `README.md`, `routes/auth.js`
+  - Not exact: `README.*`, `routes/*.js`
+- For an **entire directory**, include `/**`:
+  - Entire tree: `public/**`
+  - One level only: `public/*`
+
+**Path tips**
+
+- Always write manifest paths using **forward slashes** (e.g., `views/index.ejs`) irrespective of OS.
+- Don’t rely on case sensitivity (especially on Windows/macOS default filesystems).
+
+### Semantics
+
+**Sets & rules**
+
+- `required`: **each pattern must match ≥ 1 file** under the scaffolded app.
+- `forbidden`: if **any** file matches a pattern, it’s a **breach**.
+- `ignore`: matched files are removed from consideration (but still counted in the overall “discovered”).
+
+**Derived sets**
+
+- `present` = union of files matched by all `required` patterns
+- `missing` = required patterns that matched **zero** files
+- `breach` = files matching any `forbidden` pattern
+- `unexpected` = considered files minus `(present ∪ breach)`
+
+> Where **considered** = all discovered files **minus** ignored files.
+
+### Outcome
+
+- **FAIL**: `missing > 0` or `breach > 0` (throws in the test)
+- **WARN**: `unexpected > 0` (no throw; logged as warning)
+- **OK**: otherwise
+
+### Path resolution
+
+Same resolution order as other manifests:
+
+1. `<callerDir>/manifest`
+2. `<scenarioRootFromConfig>/manifest` (when `tests.json` lives under `<scenario>/config`)
+3. `<configDir>/manifest`
+4. `manifestPath` (if provided at the top level)
+5. `<callerDir>`
+6. `<configDir>`
+7. `CWD`
+
+> Set `E2E_DEBUG_RESOLVE=1` to log candidate paths and the chosen one.
+
+---
+
+## Best practices
+
+- Keep `required` bounded and stable; use globs carefully (prefer concrete paths for high-signal checks).
+- Always ignore volatile trees like `node_modules/**`, `.git/**`.
+- Reserve `forbidden` for **must-not-ship** artefacts; keep it small and explicit.
+- Prefer `prompt-map.json` + `interactive.include` over embedding concrete prompts in `tests.json`.
+
+### Example (best practices)
+
+```json
+{
+  "describe": "local-only scaffold",
+  "manifestPath": "test/e2e/scenarios/local-only/manifest/",
+  "scenarios": [
+    {
+      "it": "silent mode: scaffolds app without errors",
+      "scenarioName": "local-only-silent",
+      "tests": {
+        "assertScaffold": { "flags": ["--silent", "--passport", "local"] },
+        "assertEnv": { "manifest": "env.json" },
+        "assertFiles": { "manifest": "files.json" },
+        "cleanup": true
+      }
+    }
+  ]
+}
 ```
