@@ -3,6 +3,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import type { Logger } from '../../suite/types/logger.ts';
 import { logBox } from '../../suite/components/proc.ts';
+import { recordScenarioSeverityFromEnv } from '../../suite/components/scenario-status.ts';
 
 type ManifestSpec = {
   required?: string[];
@@ -103,12 +104,15 @@ export async function assertEnvMatches(opts: {
   appDir: string;
   manifestPath: string;
   log?: Logger;
+  /** For scenario-level severity aggregation */
+  scenarioName?: string;
 }): Promise<void> {
   const { appDir, manifestPath, log } = opts;
 
   const envFile = path.join(appDir, '.env');
   if (!fs.existsSync(envFile)) {
     log?.fail(`.env not found at: ${envFile}`);
+    recordScenarioSeverityFromEnv(opts.scenarioName ?? 'unknown', 'fail', { step: 'env' });
     throw new Error('.env missing');
   }
   const envText = fs.readFileSync(envFile, 'utf8');
@@ -116,6 +120,7 @@ export async function assertEnvMatches(opts: {
 
   if (!fs.existsSync(manifestPath)) {
     log?.fail(`Manifest file not found at: ${manifestPath}`);
+    recordScenarioSeverityFromEnv(opts.scenarioName ?? 'unknown', 'fail', { step: 'env' });
     throw new Error('manifest missing');
   }
   const manifest = loadManifest(manifestPath);
@@ -195,8 +200,9 @@ export async function assertEnvMatches(opts: {
       ' [·] blank/other',
     ]);
 
+    recordScenarioSeverityFromEnv(opts.scenarioName ?? 'unknown', 'fail', { step: 'env' });
     throw new Error('env assertion failed');
   }
-
+  recordScenarioSeverityFromEnv(opts.scenarioName ?? 'unknown', 'ok', { step: 'env' });
   log?.pass('Env assert passed');
 }

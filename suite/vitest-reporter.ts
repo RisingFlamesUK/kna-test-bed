@@ -1,42 +1,63 @@
 // suite/vitest-reporter.ts
-// Custom Vitest reporter: per-file, per-test summary into logs/<stamp>/suite.log
-// - Vitest v3 Runner* types (no deprecations)
-// - Buffers until KNA_LOG_STAMP is set by global-setup, then flushes via your logger
-// - Indents output so "tests attempted:" aligns under "Run Tests"
-
 import path from 'node:path';
-import { pathToFileURL } from 'node:url';
+import fs from 'fs-extra';
+import type { RunnerTestFile, RunnerTask } from 'vitest';
+import { buildSuiteLogPath, buildLogRoot, createLogger } from './components/logger.ts';
+import { CIEmitter } from './components/ci-emitter.ts';
+import type { Sev } from './types/severity.ts';
 
-import type { RunnerTestFile, RunnerTask, RunnerTestCase } from 'vitest';
-
-import { buildSuiteLogPath, createLogger } from './components/logger.ts';
+type VitestSummary = {
+  files: Array<{
+    path: string;
+    tasks?: RunnerTask[];
+    tests: Array<{
+      name: string;
+      state?: string;
+      duration?: number;
+    }>;
+    counts?: {
+      total: number;
+      passed: number;
+      failed: number;
+      skipped: number;
+    };
+  }>;
+  totals: {
+    total: number;
+    passed: number;
+    failed: number;
+    skipped: number;
+  };
+};
 
 export default class SuiteReporter {
-  private printedHeader = false;
-  private scenarioLogByName = new Map<string, string>();
-  private lastScenarioLog: string | null = null;
-  // Fallback when task is missing: remember last scenario log by file
-  private lastScenarioLogByFile = new Map<string, string>();
-
-  // buffer until we can resolve KNA_LOG_STAMP
+  // suite.log writer (unchanged behavior)
   private buffer: Array<{ line: string; indent?: number | string }> = [];
   private loggerInst: ReturnType<typeof createLogger> | null = null;
+  private readonly BUL_IND: number | string = '+2';
 
-  // Indentation: align under "Run Tests"
-  // If your step numbers reach 10+ (e.g., "10) Run Tests"), you might prefer 4.
-  private readonly BUL_IND: number | string = '+2'; // bullets under headers (step indent + 2)
+  // CI streaming
+  private ci = new CIEmitter();
+
+  // progressive change tracking
+  private lastScenarioDetailKey = '';
+  private lastVitestSummaryKey = '';
+
+  // memory for linking test names -> scenario log URL
+  private scenarioLogByName = new Map<string, string>();
+  private lastScenarioLogByFile = new Map<string, string>();
 
   private tryEnsureLogger(): void {
     if (this.loggerInst) return;
     const stamp = process.env.KNA_LOG_STAMP || '';
-    if (!stamp) return; // still too early — keep buffering
+    if (!stamp) return;
     const suitePath = buildSuiteLogPath(stamp);
     this.loggerInst = createLogger(suitePath);
     for (const item of this.buffer) this.loggerInst.write(item.line, item.indent);
     this.buffer.length = 0;
   }
 
-  private write(line: string, indent?: number | string) {
+  private write(line: string, indent?: number | string): void {
     this.tryEnsureLogger();
     if (this.loggerInst) this.loggerInst.write(line, indent);
     else this.buffer.push({ line, indent });
@@ -53,132 +74,192 @@ export default class SuiteReporter {
     return parts.filter(Boolean).join(' > ');
   }
 
-  onInit() {
-    if (!this.printedHeader) {
-      // No empty line here — prints immediately under "5) Run Tests"
-      this.write('tests attempted:');
-      this.printedHeader = true;
+  private getTestPath(task: RunnerTask | undefined): string | undefined {
+    if (!task) return undefined;
+    return (task as any)?.file?.filepath || (task as any)?.file?.name;
+  }
+
+  private shaKey(obj: unknown): string {
+    try {
+      return JSON.stringify(obj);
+    } catch {
+      return String(Math.random());
     }
   }
 
-  onUserConsoleLog(log: { content: string; task?: RunnerTask }) {
-    // Optional: capture scenario log path from helper/tests
-    const m = /\[SCENARIO_LOG\]\s+(.+)/.exec(log?.content ?? '');
-    if (!m || !m[1]) return;
+  onInit(): void {
+    this.ci.startRun();
+    const enableText =
+      process.env.KNA_VITEST_TEXT === '1' ||
+      process.argv.includes('--verbose') ||
+      process.argv.includes('-v');
+    if (enableText) this.write('tests attempted:');
+  }
 
-    const rawPath = m[1].trim();
-    // Normalize to absolute file:// URL so it's clickable in suite.log
-    const abs = path.isAbsolute(rawPath) ? rawPath : path.resolve(process.cwd(), rawPath);
-    const fileUrl = pathToFileURL(abs).toString();
+  onUserConsoleLog(log: { content: string; task?: RunnerTask }): void {
+    const txt = log?.content ?? '';
 
-    const key = this.fullName(log?.task);
-
-    // Try to capture the originating file when available
-    const filePath = (log?.task as any)?.file?.filepath || (log?.task as any)?.file?.name || null;
-
-    if (key) {
-      // Map by fully-qualified test name
-      this.scenarioLogByName.set(key, fileUrl);
+    // suite steps / end
+    {
+      const mStep = /^\[KNA_SUITE_STEP\]\s+(.+)/.exec(txt);
+      if (mStep?.[1]) this.ci.suiteStep(mStep[1].trim());
+      const mEnd = /^\[KNA_SUITE_END\]\s+(.+)/.exec(txt);
+      if (mEnd?.[1]) {
+        // close with the given vitest-style line; counts are resolved later, give zeros now
+        this.ci.suiteEnd(mEnd[1].trim(), 'e2e/suite-sentinel.log', { failed: 0, skipped: 0 });
+      }
     }
 
-    if (filePath) {
-      // Also remember a per-file fallback so we never cross-link between files
-      this.lastScenarioLogByFile.set(path.resolve(filePath), fileUrl);
+    // schema steps / end
+    {
+      const mStep = /^\[KNA_SCHEMA_STEP\]\s+(.+)/.exec(txt);
+      if (mStep?.[1]) this.ci.schemaStep(mStep[1].trim());
+      const mEnd = /^\[KNA_SCHEMA_END\]\s+(.+)/.exec(txt);
+      if (mEnd?.[1]) {
+        // close with the given vitest-style line
+        this.ci.schemaEnd(mEnd[1].trim(), 'e2e/prompt-map.schema.log', { failed: 0, skipped: 0 });
+      }
+    }
+
+    // (optional) scenario vitest line
+    const mScenVit = /^\[KNA_SCEN_VITEST\]\s+([^|]+)\|\s*(.+)/.exec(txt);
+    if (mScenVit) {
+      const [, , line] = mScenVit;
+      // Extract duration if present in log.task
+      const duration = log?.task?.result?.duration;
+      this.ci.scenarioLine(line.trim(), duration);
+    }
+
+    // scenario log file mapping (used for suite.log links)
+    const mLog = /\[SCENARIO_LOG\]\s+(.+)/.exec(txt);
+    if (mLog?.[1]) {
+      const rawPath = mLog[1].trim();
+      const abs = path.isAbsolute(rawPath) ? rawPath : path.resolve(process.cwd(), rawPath);
+      const key = this.fullName(log?.task);
+      const filePath = this.getTestPath(log?.task);
+
+      this.scenarioLogByName.set(key, abs);
+      if (filePath) this.lastScenarioLogByFile.set(filePath, abs);
     }
   }
 
-  onFinished(files: RunnerTestFile[]) {
-    const cwd = process.cwd();
+  onTaskUpdate(): void {
+    // drive progressive CI from artifacts + known file layout
+    const stamp = process.env.KNA_LOG_STAMP || '';
+    if (!stamp) return;
 
-    for (const file of files) {
-      const filePath = (file as any).filepath || (file as any).name || '(unknown)';
-      const rel = path.relative(cwd, filePath);
+    const root = buildLogRoot(stamp);
+    const e2eDir = path.join(root, 'e2e');
+    const scenDetailPath = path.join(e2eDir, '_scenario-detail.json');
+    const vitestSummaryPath = path.join(e2eDir, '_vitest-summary.json');
 
-      // First pass: counts
-      let total = 0,
-        passed = 0,
-        failed = 0,
-        skipped = 0;
+    // Load and validate current file state
+    const scenDetail = fs.pathExistsSync(scenDetailPath) ? fs.readJsonSync(scenDetailPath) : {};
+    const vitest: VitestSummary = fs.pathExistsSync(vitestSummaryPath)
+      ? fs.readJsonSync(vitestSummaryPath)
+      : { files: [], totals: { total: 0, passed: 0, failed: 0, skipped: 0 } };
 
-      const walkCount = (t: RunnerTask) => {
-        const kids = (t as any).tasks as RunnerTask[] | undefined;
-        if (!kids || kids.length === 0) {
-          total++;
-          const test = t as unknown as RunnerTestCase;
-          const state = test.result?.state;
-          const isSkip =
-            state === 'skip' || (test as any).mode === 'skip' || (test as any).mode === 'todo';
-          if (state === 'pass') passed++;
-          else if (isSkip) skipped++;
-          else if (state === 'fail') failed++;
-          else failed++;
-          return;
-        }
-        for (const c of kids) walkCount(c);
+    // Check for changes
+    const scenKey = this.shaKey(scenDetail);
+    const sumKey = this.shaKey(vitest);
+    const changed = scenKey !== this.lastScenarioDetailKey || sumKey !== this.lastVitestSummaryKey;
+    if (!changed) return;
+    this.lastScenarioDetailKey = scenKey;
+    this.lastVitestSummaryKey = sumKey;
+
+    // Process test summaries and output
+    for (const file of vitest.files) {
+      if (!file.path) continue;
+
+      // Calculate test counts for this file
+      const counts = {
+        total: 0,
+        passed: 0,
+        failed: 0,
+        skipped: 0,
       };
-      walkCount(file as unknown as RunnerTask);
 
-      // File header (indented under "Run Tests")
-      this.write(
-        `${rel}  (tests: ${total}, passed: ${passed}, failed: ${failed}, skipped: ${skipped})`,
-        this.BUL_IND,
+      for (const test of file.tests) {
+        counts.total++;
+        if (test.state === 'pass') counts.passed++;
+        else if (test.state === 'fail') counts.failed++;
+        else if (test.state === 'skip') counts.skipped++;
+      }
+
+      // Format paths
+      const absPath = path.resolve(process.cwd(), file.path);
+      const logPath = path.join('e2e', path.basename(file.path).replace(/\.ts$/, '.log'));
+
+      // Determine test area and indent based on file type
+      const { title, indent } = /test[\\/]+e2e[\\/]+suite\.test\.ts$/i.test(file.path)
+        ? { title: 'Docker PG Environment', indent: undefined }
+        : /test[\\/]+e2e[\\/]+scenarios[\\/]+_runner[\\/]+prompt-map\.schema\.test\.ts$/i.test(
+              file.path,
+            )
+          ? { title: 'Scenario schema tests', indent: '  ' }
+          : { title: file.tasks?.[0]?.name || 'Unknown Test Area', indent: undefined };
+
+      // Start test area and output test steps
+      this.ci.testAreaStart(title, absPath, indent);
+
+      for (const test of file.tests) {
+        const status: Sev = test.state === 'pass' ? 'ok' : test.state === 'fail' ? 'fail' : 'warn';
+        this.ci.testStep(test.name, status, indent);
+      }
+
+      this.ci.testAreaEnd(`${path.basename(file.path)} • ${title}`, logPath, counts, indent);
+    }
+
+    // Handle scenario details
+    const names: string[] = Object.keys(scenDetail).sort((a, b) => a.localeCompare(b));
+    if (names.length) {
+      const bases = Array.from(new Set(names.map((n) => n.replace(/-([^-.]+)$/, '')))).map((base) =>
+        path.join('test', 'e2e', 'scenarios', base, 'config', 'tests.json'),
       );
 
-      // Second pass: individual test lines
-      const walkLines = (t: RunnerTask) => {
-        const kids = (t as any).tasks as RunnerTask[] | undefined;
-        if (!kids || kids.length === 0) {
-          const test = t as unknown as RunnerTestCase;
-          const state = test.result?.state;
-          const isSkip =
-            state === 'skip' || (test as any).mode === 'skip' || (test as any).mode === 'todo';
-          const isPass = state === 'pass';
-          const isFail = state === 'fail';
+      this.ci.scenarioOpen(bases.map((p) => path.resolve(p)));
+      for (const name of names) {
+        this.ci.scenarioTest(name);
+        const d = scenDetail[name] || {};
+        (['scaffold', 'env', 'files'] as const).forEach((step) => {
+          const info = d[step];
+          if (!info) return;
+          const sev: Sev =
+            info.severity === 'ok' || info.severity === 'warn' || info.severity === 'fail'
+              ? info.severity
+              : 'fail';
+          this.ci.scenarioCheck(step, sev);
+        });
+        const done = d.scaffold?.severity && d.env?.severity && d.files?.severity;
+        if (done) this.ci.scenarioDone(name, `e2e/${name}.log`);
+      }
 
-          let mark = '❓';
-          if (isPass) mark = '✅';
-          else if (isSkip) mark = '↩️';
-          else if (isFail) mark = '❌';
-
-          const dur =
-            test.result?.duration != null ? ` (${Math.round(test.result.duration)}ms)` : '';
-
-          const key = this.fullName(test);
-
-          // 1) Direct match by full test name
-          let link = this.scenarioLogByName.get(key);
-
-          // 2) Fallback: by file (never cross-file)
-          if (!link) {
-            const fpath =
-              (test as any)?.file?.filepath ||
-              (test as any)?.file?.name ||
-              (file as any).filepath ||
-              (file as any).name ||
-              '';
-            const resolved = fpath ? path.resolve(fpath) : '';
-            if (resolved) {
-              const byFile = this.lastScenarioLogByFile.get(resolved);
-              if (byFile) {
-                link = byFile;
-                this.lastScenarioLogByFile.delete(resolved);
-              }
-            }
-          }
-
-          const suffix = link ? `  ${link}` : '';
-
-          this.write(`• ${mark} ${this.fullName(test)}${dur}${suffix}`, this.BUL_IND);
-          return;
-        }
-        for (const c of kids) walkLines(c);
-      };
-      walkLines(file as unknown as RunnerTask);
+      // close summary when all done
+      const rank: Record<Sev, number> = { ok: 0, warn: 1, fail: 2 };
+      let ok = 0,
+        warn = 0,
+        fail = 0;
+      for (const name of names) {
+        const d = scenDetail[name] || {};
+        const sevList = (['scaffold', 'env', 'files'] as const)
+          .map((k) => d[k]?.severity)
+          .filter(Boolean) as Sev[];
+        const worst = sevList.reduce<Sev>((acc, s) => (rank[acc] >= rank[s] ? acc : s), 'ok');
+        if (worst === 'fail') fail++;
+        else if (worst === 'warn') warn++;
+        else ok++;
+      }
+      this.ci.scenarioCloseSummary({ names, ok, warn, fail });
     }
+  }
 
-    this.write(`— end of tests —\n`);
+  onFinished(_files: RunnerTestFile[]): void {
+    const enableText =
+      process.env.KNA_VITEST_TEXT === '1' ||
+      process.argv.includes('--verbose') ||
+      process.argv.includes('-v');
 
-    // Safety: if stamp never appeared, we leave the buffered lines;
-    // global-setup should always set KNA_LOG_STAMP in this project.
+    // At this point, all test areas are complete
+    if (enableText) this.write('— end of tests —\n');
   }
 }

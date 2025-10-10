@@ -159,16 +159,22 @@ export async function assertFiles(opts: AssertFilesOptions): Promise<void> {
 
   // 8) Final status LAST
   if (missing > 0 || breach > 0) {
-    recordScenarioSeverityFromEnv(opts.scenarioName ?? 'unknown', 'fail');
+    recordScenarioSeverityFromEnv(opts.scenarioName ?? 'unknown', 'fail', {
+      step: 'files',
+      meta: { missingCount: missing, breachCount: breach, unexpectedCount: unexpected },
+    });
     logger.fail('fs-assert: FAIL');
     throw new Error('fs-assert: required/forbidden checks failed');
   }
   if (unexpected > 0) {
-    recordScenarioSeverityFromEnv(opts.scenarioName ?? 'unknown', 'warn');
+    recordScenarioSeverityFromEnv(opts.scenarioName ?? 'unknown', 'warn', {
+      step: 'files',
+      meta: { missingCount: missing, breachCount: breach, unexpectedCount: unexpected },
+    });
     if ('warn' in logger && typeof logger.warn === 'function') logger.warn('fs-assert: WARN');
     else logger.write('fs-assert: WARN');
     return;
   }
-  recordScenarioSeverityFromEnv(opts.scenarioName ?? 'unknown', 'ok');
+  recordScenarioSeverityFromEnv(opts.scenarioName ?? 'unknown', 'ok', { step: 'files' });
   logger.pass('fs-assert: OK');
 }

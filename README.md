@@ -24,9 +24,19 @@ npm run test:e2e:watch
 
 Logs go to `logs/<STAMP>/…`:
 
-- `suite.log`: suite setup/teardown (Docker, PG, env)
-- per-scenario logs (e.g., `local-only-silent.log`, `local-only-answers.log`, `local-only-interactive.log`)
+- `suite.log`: suite setup/teardown (Docker, PG, env) **and consolidated Step 7 (Suite/Schema/Scenario)**
+- per-scenario logs (e.g., `./e2e/local-only-silent.log`, `./e2e/local-only-answers.log`, `./e2e/local-only-interactive.log`)
+- artifacts: `./e2e/_vitest-summary.json` (per-file counts) and `./e2e/_scenario-detail.json` (scenario step severities)
 - meta checks (e.g., `prompt-map.schema.log`, `suite-sentinel.log`)
+
+### Verbose output (optional)
+
+The suite is **quiet by default**. To print Vitest’s per-file lines in the suite.log:
+
+- CLI: `npm run test -- --verbose` (or `-v`)
+- Env: `KNA_VITEST_TEXT=1 npm test`
+
+`_vitest-summary.json` is **always** written; the Step 7 summary in `suite.log` is available in both modes.
 
 ---
 

@@ -18,9 +18,13 @@ logs/
 # directory tree generator
 directory_tree.json
 
+# copilot incl. instructions
+.github/
+
 # under development
 local+google/
-ToDo.md
+bearer+microsoft/
+docs/planning
 
 ############################
 # Node setings from GitHub #

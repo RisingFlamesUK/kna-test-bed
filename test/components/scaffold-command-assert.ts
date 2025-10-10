@@ -13,6 +13,7 @@ import {
 import { type Logger } from '../../suite/types/logger.ts';
 import { execBoxed } from '../../suite/components/proc.ts';
 import { runInteractive, Prompt } from './interactive-driver.ts';
+import { recordScenarioSeverityFromEnv } from '../../suite/components/scenario-status.ts';
 
 export type ScaffoldCmdOpts = {
   scenarioName: string; // e.g. "local-only"
@@ -45,7 +46,6 @@ function generateAppName(scenarioName: string): string {
 
 export async function assertScaffoldCommand(opts: ScaffoldCmdOpts): Promise<ScaffoldResult> {
   const log = opts.log ?? scenarioLoggerFromEnv(opts.scenarioName);
-  console.log('[SCENARIO_LOG]', log.filePath);
 
   // 1) Resolve temp root and ensure it exists
   const tmpRoot = KNA_TMP_DIR
@@ -62,6 +62,10 @@ export async function assertScaffoldCommand(opts: ScaffoldCmdOpts): Promise<Scaf
   log.write(`appDir=${appDir}`);
 
   if (await fs.pathExists(appDir)) {
+    recordScenarioSeverityFromEnv(opts.scenarioName, 'fail', {
+      step: 'scaffold',
+      meta: { note: 'target path exists' },
+    });
     log.fail(`Target path already exists: ${appDir}`);
     throw new Error(`Refusing to scaffold into existing path: ${appDir}`);
   }
@@ -138,10 +142,11 @@ export async function assertScaffoldCommand(opts: ScaffoldCmdOpts): Promise<Scaf
         argsWrapWidth: 100,
       });
     }
-
+    recordScenarioSeverityFromEnv(opts.scenarioName, 'ok', { step: 'scaffold' });
     log.pass(`Scaffold completed successfully`);
   } catch (e: any) {
     const msg = e?.message ?? String(e);
+    recordScenarioSeverityFromEnv(opts.scenarioName, 'fail', { step: 'scaffold' });
     log.fail(`Scaffold failed: ${msg}`);
     throw e;
   }
@@ -149,6 +154,7 @@ export async function assertScaffoldCommand(opts: ScaffoldCmdOpts): Promise<Scaf
   // 6) Postcondition: ensure appDir now exists
   const created = await fs.pathExists(appDir);
   if (!created) {
+    recordScenarioSeverityFromEnv(opts.scenarioName, 'fail', { step: 'scaffold' });
     log.fail(`Scaffold reported success but path not found: ${appDir}`);
     throw new Error(`Scaffold did not produce ${appDir}`);
   }

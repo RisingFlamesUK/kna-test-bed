@@ -1,0 +1,486 @@
+// suite/vitest-reporter.ts
+import path from 'node:path';
+import fs from 'fs-extra';
+import type { RunnerTestFile, RunnerTask, RunnerTestCase } from 'vitest';
+import { buildSuiteLogPath, buildLogRoot, createLogger } from './components/logger.ts';
+import { CIEmitter } from './components/ci-emitter.ts';
+import type { Sev } from './types/severity.ts';
+
+type VitestSummary = {
+  files: Array<{
+    path: string;
+    tasks?: RunnerTask[];
+    tests: Array<{
+      name: string;
+      state?: string;
+      duration?: number;
+    }>;
+    counts?: {
+      total: number;
+      passed: number;
+      failed: number;
+      skipped: number;
+    };
+  }>;
+  totals: {
+    total: number;
+    passed: number;
+    failed: number;
+    skipped: number;
+  };
+};
+
+  // suite.log writer (unchanged behavior)
+
+export default class SuiteReporter {  private buffer: Array<{ line: string; indent?: number | string }> = [];
+
+  // suite.log writer (unchanged behavior)  private loggerInst: ReturnType<typeof createLogger> | null = null;
+
+  private buffer: Array<{ line: string; indent?: number | string }> = [];  private readonly BUL_IND: number | string = '+2';
+
+  private loggerInst: ReturnType<typeof createLogger> | null = null;
+
+  private readonly BUL_IND: number | string = '+2';  // CI streaming  
+
+  private ci = new CIEmitter();
+
+  // CI streaming
+
+  private ci = new CIEmitter();  // progressive change tracking
+
+  private lastScenarioDetailKey = '';
+
+  // progressive change tracking  private lastVitestSummaryKey = '';
+
+  private lastScenarioDetailKey = '';
+
+  private lastVitestSummaryKey = '';  // memory for linking test names -> scenario log URL
+
+  private scenarioLogByName = new Map<string, string>();
+
+  // memory for linking test names -> scenario log URL  private lastScenarioLogByFile = new Map<string, string>();
+
+  private scenarioLogByName = new Map<string, string>();
+
+  private lastScenarioLogByFile = new Map<string, string>();  private tryEnsureLogger(): void {
+
+    if (this.loggerInst) return;
+
+  private tryEnsureLogger(): void {    const stamp = process.env.KNA_LOG_STAMP || '';
+
+    if (this.loggerInst) return;    if (!stamp) return;
+
+    const stamp = process.env.KNA_LOG_STAMP || '';    const suitePath = buildSuiteLogPath(stamp);
+
+    if (!stamp) return;    this.loggerInst = createLogger(suitePath);
+
+    const suitePath = buildSuiteLogPath(stamp);    for (const item of this.buffer) this.loggerInst.write(item.line, item.indent);
+
+    this.loggerInst = createLogger(suitePath);    this.buffer.length = 0;
+
+    for (const item of this.buffer) this.loggerInst.write(item.line, item.indent);  }
+
+    this.buffer.length = 0;
+
+  }  private write(line: string, indent?: number | string): void {
+
+    this.tryEnsureLogger();
+
+  private write(line: string, indent?: number | string): void {    if (this.loggerInst) this.loggerInst.write(line, indent);
+
+    this.tryEnsureLogger();    else this.buffer.push({ line, indent });
+
+    if (this.loggerInst) this.loggerInst.write(line, indent);  }
+
+    else this.buffer.push({ line, indent });
+
+  }  private fullName(task: RunnerTask | undefined): string {
+
+    if (!task) return '';
+
+  private fullName(task: RunnerTask | undefined): string {    const parts: string[] = [];
+
+    if (!task) return '';    let cur: RunnerTask | undefined = task;
+
+    const parts: string[] = [];    while (cur) {
+
+    let cur: RunnerTask | undefined = task;      if (cur.name) parts.unshift(cur.name);
+
+    while (cur) {      cur = (cur as any).suite as RunnerTask | undefined;
+
+      if (cur.name) parts.unshift(cur.name);    }
+
+      cur = (cur as any).suite as RunnerTask | undefined;    return parts.filter(Boolean).join(' > ');
+
+    }  }
+
+    return parts.filter(Boolean).join(' > ');
+
+  }  private getTestPath(task: RunnerTask | undefined): string | undefined {
+
+    if (!task) return undefined;
+
+  private getTestPath(task: RunnerTask | undefined): string | undefined {    return (task as any)?.file?.filepath || (task as any)?.file?.name;
+
+    if (!task) return undefined;  }
+
+    return (task as any)?.file?.filepath || (task as any)?.file?.name;
+
+  }  private shaKey(obj: unknown): string {
+
+    try { return JSON.stringify(obj); } catch { return String(Math.random()); }
+
+  private shaKey(obj: unknown): string {  }
+
+    try { return JSON.stringify(obj); } catch { return String(Math.random()); }
+
+  }  onInit() {
+
+    this.ci.startRun();
+
+  onInit(): void {    const enableText =
+
+    this.ci.startRun();      process.env.KNA_VITEST_TEXT === '1' ||
+
+    const enableText =      process.argv.includes('--verbose') ||
+
+      process.env.KNA_VITEST_TEXT === '1' ||      process.argv.includes('-v');
+
+      process.argv.includes('--verbose') ||    if (enableText) this.write('tests attempted:');
+
+      process.argv.includes('-v');  }
+
+    if (enableText) this.write('tests attempted:');
+
+  }  onUserConsoleLog(log: { content: string; task?: RunnerTask }) {
+
+    const txt = log?.content ?? '';
+
+  onUserConsoleLog(log: { content: string; task?: RunnerTask }): void {
+
+    const txt = log?.content ?? '';    // suite steps / end
+
+    {
+
+    // suite steps / end      const mStep = /^\[KNA_SUITE_STEP\]\s+(.+)/.exec(txt);
+
+    {      if (mStep?.[1]) this.ci.suiteStep(mStep[1].trim());
+
+      const mStep = /^\[KNA_SUITE_STEP\]\s+(.+)/.exec(txt);
+
+      if (mStep?.[1]) this.ci.suiteStep(mStep[1].trim());      const mEnd = /^\[KNA_SUITE_END\]\s+(.+)/.exec(txt);
+
+      if (mEnd?.[1]) {
+
+      const mEnd = /^\[KNA_SUITE_END\]\s+(.+)/.exec(txt);        // close with the given vitest-style line; counts are resolved later, give zeros now
+
+      if (mEnd?.[1]) {        this.ci.suiteEnd(mEnd[1].trim(), 'e2e/suite-sentinel.log', { failed: 0, skipped: 0 });
+
+        // close with the given vitest-style line; counts are resolved later, give zeros now      }
+
+        this.ci.suiteEnd(mEnd[1].trim(), 'e2e/suite-sentinel.log', { failed: 0, skipped: 0 });    }
+
+      }
+
+    }    // schema steps / end
+
+    {
+
+    // schema steps / end      const mStep = /^\[KNA_SCHEMA_STEP\]\s+(.+)/.exec(txt);
+
+    {      if (mStep?.[1]) this.ci.schemaStep(mStep[1].trim());
+
+      const mStep = /^\[KNA_SCHEMA_STEP\]\s+(.+)/.exec(txt);
+
+      if (mStep?.[1]) this.ci.schemaStep(mStep[1].trim());      const mEnd = /^\[KNA_SCHEMA_END\]\s+(.+)/.exec(txt);
+
+      if (mEnd?.[1]) {
+
+      const mEnd = /^\[KNA_SCHEMA_END\]\s+(.+)/.exec(txt);        this.ci.schemaEnd(mEnd[1].trim(), 'e2e/prompt-map.schema.log', { failed: 0, skipped: 0 });
+
+      if (mEnd?.[1]) {      }
+
+        this.ci.schemaEnd(mEnd[1].trim(), 'e2e/prompt-map.schema.log', { failed: 0, skipped: 0 });    }
+
+      }
+
+    }    // (optional) scenario vitest line
+
+    const mScenVit = /^\[KNA_SCEN_VITEST\]\s+([^|]+)\|\s*(.+)/.exec(txt);
+
+    // (optional) scenario vitest line    // format: [KNA_SCEN_VITEST] <scenario-name>| <after-the-">" text with (N ms)
+
+    const mScenVit = /^\[KNA_SCEN_VITEST\]\s+([^|]+)\|\s*(.+)/.exec(txt);    if (mScenVit) {
+
+    if (mScenVit) {      const [, scenName, line] = mScenVit;
+
+      const [, scenName, line] = mScenVit;      // Extract duration if present in log.task
+
+      // Extract duration if present in log.task      const duration = log?.task?.result?.duration;
+
+      const duration = log?.task?.result?.duration;      this.ci.scenarioLine(line.trim(), duration);
+
+      this.ci.scenarioLine(line.trim(), duration);    }
+
+    }
+
+    // scenario log file mapping (used for suite.log links)
+
+    // scenario log file mapping (used for suite.log links)    const mLog = /\[SCENARIO_LOG\]\s+(.+)/.exec(txt);
+
+    const mLog = /\[SCENARIO_LOG\]\s+(.+)/.exec(txt);    if (mLog?.[1]) {
+
+    if (mLog?.[1]) {      const rawPath = mLog[1].trim();
+
+      const rawPath = mLog[1].trim();      const abs = path.isAbsolute(rawPath) ? rawPath : path.resolve(process.cwd(), rawPath);
+
+      const abs = path.isAbsolute(rawPath) ? rawPath : path.resolve(process.cwd(), rawPath);      const key = this.fullName(log?.task);
+
+      const key = this.fullName(log?.task);      const filePath =
+
+      const filePath =        (log?.task as any)?.file?.filepath || (log?.task as any)?.file?.name || null;
+
+        (log?.task as any)?.file?.filepath || (log?.task as any)?.file?.name || null;      const url = `file://${abs.replace(/\\/g, '/')}`;
+
+      const url = `file://${abs.replace(/\\/g, '/')}`;      if (key) this.scenarioLogByName.set(key, url);
+
+      if (key) this.scenarioLogByName.set(key, url);      if (filePath) this.lastScenarioLogByFile.set(path.resolve(filePath), url);
+
+      if (filePath) this.lastScenarioLogByFile.set(path.resolve(filePath), url);    }
+
+    }  }
+
+  }
+
+  onTaskUpdate() {
+
+  onTaskUpdate(): void {    // drive progressive CI from artifacts + known file layout
+
+    // drive progressive CI from artifacts + known file layout    const stamp = process.env.KNA_LOG_STAMP || '';
+
+    const stamp = process.env.KNA_LOG_STAMP || '';    if (!stamp) return;
+
+    if (!stamp) return;
+
+    const root = buildLogRoot(stamp);
+
+    const root = buildLogRoot(stamp);    const e2eDir = path.join(root, 'e2e');
+
+    const e2eDir = path.join(root, 'e2e');    const scenDetailPath = path.join(e2eDir, '_scenario-detail.json');
+
+    const scenDetailPath = path.join(e2eDir, '_scenario-detail.json');    const vitestSummaryPath = path.join(e2eDir, '_vitest-summary.json');
+
+    const vitestSummaryPath = path.join(e2eDir, '_vitest-summary.json');
+
+    // Load and validate current file state
+
+    // Load and validate current file state    const scenDetail = fs.pathExistsSync(scenDetailPath) ? fs.readJsonSync(scenDetailPath) : {};
+
+    const scenDetail = fs.pathExistsSync(scenDetailPath) ? fs.readJsonSync(scenDetailPath) : {};    const vitest: VitestSummary = fs.pathExistsSync(vitestSummaryPath)
+
+    const vitest: VitestSummary = fs.pathExistsSync(vitestSummaryPath)      ? fs.readJsonSync(vitestSummaryPath)
+
+      ? fs.readJsonSync(vitestSummaryPath)      : { files: [], totals: { total: 0, passed: 0, failed: 0, skipped: 0 } };
+
+      : { files: [], totals: { total: 0, passed: 0, failed: 0, skipped: 0 } };
+
+    // Check for changes
+
+    // Check for changes    const scenKey = this.shaKey(scenDetail);
+
+    const scenKey = this.shaKey(scenDetail);    const sumKey = this.shaKey(vitest);
+
+    const sumKey = this.shaKey(vitest);    const changed = scenKey !== this.lastScenarioDetailKey || sumKey !== this.lastVitestSummaryKey;
+
+    const changed = scenKey !== this.lastScenarioDetailKey || sumKey !== this.lastVitestSummaryKey;    if (!changed) return;
+
+    if (!changed) return;    this.lastScenarioDetailKey = scenKey;
+
+    this.lastScenarioDetailKey = scenKey;    this.lastVitestSummaryKey = sumKey;
+
+    this.lastVitestSummaryKey = sumKey;
+
+    // Process test summaries and output
+
+    // Process test summaries and output    for (const file of vitest.files) {
+
+    for (const file of vitest.files) {      if (!file.path) continue;
+
+      if (!file.path) continue;
+
+      // Calculate test counts for this file
+
+      // Calculate test counts for this file      const counts = {
+
+      const counts = {        total: 0,
+
+        total: 0,        passed: 0,
+
+        passed: 0,        failed: 0,
+
+        failed: 0,        skipped: 0
+
+        skipped: 0      };
+
+      };
+
+      for (const test of file.tests) {
+
+      for (const test of file.tests) {        counts.total++;
+
+        counts.total++;        if (test.state === 'pass') counts.passed++;
+
+        if (test.state === 'pass') counts.passed++;        else if (test.state === 'fail') counts.failed++;
+
+        else if (test.state === 'fail') counts.failed++;        else if (test.state === 'skip') counts.skipped++;
+
+        else if (test.state === 'skip') counts.skipped++;      }
+
+      }
+
+      // Format paths
+
+      // Format paths      const absPath = path.resolve(process.cwd(), file.path);
+
+      const absPath = path.resolve(process.cwd(), file.path);      const logPath = path.join('e2e', path.basename(file.path).replace(/\.ts$/, '.log'));
+
+      const logPath = path.join('e2e', path.basename(file.path).replace(/\.ts$/, '.log'));
+
+      // Determine test area and indent based on file type
+
+      // Determine test area and indent based on file type      const { title, indent } = 
+
+      const { title, indent } =         /test[\\/]+e2e[\\/]+suite\.test\.ts$/i.test(file.path) 
+
+        /test[\\/]+e2e[\\/]+suite\.test\.ts$/i.test(file.path)           ? { title: 'Docker PG Environment', indent: undefined }
+
+          ? { title: 'Docker PG Environment', indent: undefined }          : /test[\\/]+e2e[\\/]+scenarios[\\/]+_runner[\\/]+prompt-map\.schema\.test\.ts$/i.test(file.path)
+
+          : /test[\\/]+e2e[\\/]+scenarios[\\/]+_runner[\\/]+prompt-map\.schema\.test\.ts$/i.test(file.path)          ? { title: 'Scenario schema tests', indent: '  ' }
+
+          ? { title: 'Scenario schema tests', indent: '  ' }          : { title: file.tasks?.[0]?.name || 'Unknown Test Area', indent: undefined };
+
+          : { title: file.tasks?.[0]?.name || 'Unknown Test Area', indent: undefined };
+
+      // Start test area and output test steps
+
+      // Start test area output      this.ci.testAreaStart(title, absPath, indent);
+
+      this.ci.testAreaStart(title, absPath, indent);      
+
+            for (const test of file.tests) {
+
+      for (const test of file.tests) {        const status: Sev = test.state === 'pass' ? 'ok' : test.state === 'fail' ? 'fail' : 'warn';
+
+        const status: Sev = test.state === 'pass' ? 'ok' : test.state === 'fail' ? 'fail' : 'warn';        this.ci.testStep(test.name, status, indent);
+
+        this.ci.testStep(test.name, status, indent);      }
+
+      }
+
+      this.ci.testAreaEnd(`${path.basename(file.path)} • ${title}`, logPath, counts, indent);
+
+      this.ci.testAreaEnd(`${path.basename(file.path)} • ${title}`, logPath, counts, indent);
+
+    }    // SCENARIOS: progressive based on _scenario-detail
+
+    const names: string[] = Object.keys(scenDetail).sort((a, b) => a.localeCompare(b));
+
+    // SCENARIOS: progressive based on _scenario-detail    if (names.length) {
+
+    const names: string[] = Object.keys(scenDetail).sort((a, b) => a.localeCompare(b));      // config pointer(s): derive bases once
+
+    if (names.length) {      const bases = Array.from(new Set(names.map((n) => n.replace(/-([^-.]+)$/, '')))).map((base) =>
+
+      // config pointer(s): derive bases once        path.join('test', 'e2e', 'scenarios', base, 'config', 'tests.json'),
+
+      const bases = Array.from(new Set(names.map((n) => n.replace(/-([^-.]+)$/, '')))).map((base) =>      );
+
+        path.join('test', 'e2e', 'scenarios', base, 'config', 'tests.json'),      this.ci.scenarioOpen(bases.map((p) => path.resolve(p)));
+
+      );
+
+      this.ci.scenarioOpen(bases.map((p) => path.resolve(p)));      for (const name of names) {
+
+        this.ci.scenarioTest(name);
+
+      for (const name of names) {        const d = scenDetail[name] || {};
+
+        this.ci.scenarioTest(name);        (['scaffold', 'env', 'files'] as const).forEach((step) => {
+
+        const d = scenDetail[name] || {};          const info = d[step];
+
+        (['scaffold', 'env', 'files'] as const).forEach((step) => {          if (!info) return;
+
+          const info = d[step];          const sev: Sev = info.severity === 'ok' || info.severity === 'warn' || info.severity === 'fail' ? info.severity : 'fail';
+
+          if (!info) return;          this.ci.scenarioCheck(step, sev);
+
+          const sev: Sev = info.severity === 'ok' || info.severity === 'warn' || info.severity === 'fail' ? info.severity : 'fail';        });
+
+          this.ci.scenarioCheck(step, sev);        const done = d.scaffold?.severity && d.env?.severity && d.files?.severity;
+
+        });        if (done) this.ci.scenarioDone(name, `e2e/${name}.log`);
+
+        const done = d.scaffold?.severity && d.env?.severity && d.files?.severity;      }
+
+        if (done) this.ci.scenarioDone(name, `e2e/${name}.log`);
+
+      }      // close summary when all done
+
+      const rank: Record<Sev, number> = { ok: 0, warn: 1, fail: 2 };
+
+      // close summary when all done      let ok = 0, warn = 0, fail = 0;
+
+      const rank: Record<Sev, number> = { ok: 0, warn: 1, fail: 2 };      for (const name of names) {
+
+      let ok = 0, warn = 0, fail = 0;        const d = scenDetail[name] || {};
+
+      for (const name of names) {        const sevList = (['scaffold', 'env', 'files'] as const)
+
+        const d = scenDetail[name] || {};          .map((k) => d[k]?.severity)
+
+        const sevList = (['scaffold', 'env', 'files'] as const)          .filter(Boolean) as Sev[];
+
+          .map((k) => d[k]?.severity)        const worst = sevList.reduce<Sev>((acc, s) => (rank[acc] >= rank[s] ? acc : s), 'ok');
+
+          .filter(Boolean) as Sev[];        if (worst === 'fail') fail++;
+
+        const worst = sevList.reduce<Sev>((acc, s) => (rank[acc] >= rank[s] ? acc : s), 'ok');        else if (worst === 'warn') warn++;
+
+        if (worst === 'fail') fail++;        else ok++;
+
+        else if (worst === 'warn') warn++;      }
+
+        else ok++;      this.ci.scenarioCloseSummary({ names, ok, warn, fail });
+
+      }    }
+
+      this.ci.scenarioCloseSummary({ names, ok, warn, fail });  }
+
+    }
+
+  }  onFinished(files: RunnerTestFile[]): void {
+
+    // Keep writing suite.log details
+
+  onFinished(_files: RunnerTestFile[]): void {    const enableText =
+
+    // Keep writing suite.log details      process.env.KNA_VITEST_TEXT === '1' ||
+
+    const enableText =      process.argv.includes('--verbose') ||
+
+      process.env.KNA_VITEST_TEXT === '1' ||      process.argv.includes('-v');
+
+      process.argv.includes('--verbose') ||
+
+      process.argv.includes('-v');    // At this point, all test areas are complete
+
+    if (enableText) this.write('— end of tests —\n');
+
+    // At this point, all test areas are complete  }
+
+    if (enableText) this.write('— end of tests —\n');}
+
+  }
+}

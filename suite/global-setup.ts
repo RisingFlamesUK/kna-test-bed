@@ -1,5 +1,6 @@
 // suite/global-setup.ts
 import path from 'node:path';
+import fs from 'fs-extra';
 import { pathToFileURL } from 'node:url';
 
 import {
@@ -10,6 +11,13 @@ import {
 } from './components/logger.ts';
 import { ensureDocker } from './components/docker-suite.ts';
 import { ensurePg, PgHandle } from './components/pg-suite.ts';
+import type { ScenarioSeverity } from './components/scenario-status.ts';
+
+const ICON: Record<ScenarioSeverity, string> = { ok: '✅', warn: '⚠️', fail: '❌' };
+
+function toSev(x: unknown): ScenarioSeverity {
+  return x === 'ok' || x === 'warn' || x === 'fail' ? x : 'fail';
+}
 
 // Helper to always print a pointer to this run’s logs
 function printLogsPointer(stamp: string) {
@@ -56,6 +64,124 @@ export default async function globalSetup(): Promise<void | (() => Promise<void>
     return async () => {
       // Let reporter flush one tick before we start teardown steps
       await new Promise<void>((r) => setImmediate(r));
+
+      // --- Consolidated Step 7: Suite/Schema/Scenario summaries (before teardown) ---
+      try {
+        const root = buildLogRoot(stamp);
+        const e2eDir = path.join(root, 'e2e');
+        const vitestSummaryPath = path.join(e2eDir, '_vitest-summary.json');
+        const scenDetailPath = path.join(e2eDir, '_scenario-detail.json');
+
+        const MARK: Record<string, string> = { pass: '✅', fail: '❌', skip: '↩️', unknown: '❓' };
+
+        // Read artifacts (both optional)
+        const vitest = (await fs.pathExists(vitestSummaryPath))
+          ? ((await fs.readJson(vitestSummaryPath)) as {
+              files: {
+                path: string;
+                counts: { total: number; passed: number; failed: number; skipped: number };
+                tests: { name: string; state: string; duration?: number }[];
+              }[];
+              totals: { total: number; passed: number; failed: number; skipped: number };
+            })
+          : { files: [], totals: { total: 0, passed: 0, failed: 0, skipped: 0 } };
+
+        const scenDetail: Record<string, any> = (await fs.pathExists(scenDetailPath))
+          ? await fs.readJson(scenDetailPath)
+          : {};
+
+        // Helpers
+        const findFiles = (re: RegExp) => vitest.files.filter((f) => re.test(f.path));
+        const printFileGroup = (title: string, files: typeof vitest.files) => {
+          if (!files.length) return;
+          suiteLog.write(
+            `  ┌─ ${title} ─────────────────────────────────────────────────────────────`,
+          );
+          for (const f of files) {
+            suiteLog.write(`  │ ${f.path}`);
+            for (const t of f.tests) {
+              const dur = t.duration != null ? ` (${t.duration}ms)` : '';
+              suiteLog.write(`  │ • ${MARK[t.state] ?? '❓'} ${t.name}${dur}`);
+            }
+            const c = f.counts;
+            suiteLog.write(
+              `  └─ (tests: ${c.total}, passed: ${c.passed}, failed: ${c.failed}, warning: 0, skipped: ${c.skipped}) ────────────────`,
+            );
+          }
+        };
+
+        // 1) Suite tests
+        printFileGroup('Suite tests', findFiles(/test[\\/]+e2e[\\/]+suite\.test\.ts$/i));
+
+        // 2) Scenario schema tests
+        printFileGroup(
+          'Scenario schema tests',
+          findFiles(
+            /test[\\/]+e2e[\\/]+scenarios[\\/]+_runner[\\/]+prompt-map\.schema\.test\.ts$/i,
+          ),
+        );
+
+        // 3) Scenario tests from our artifacts (includes WARN)
+        if (Object.keys(scenDetail).length) {
+          suiteLog.write(
+            `  ┌─ Scenario tests ──────────────────────────────────────────────────────────`,
+          );
+
+          const names = Object.keys(scenDetail).sort((a, b) => a.localeCompare(b));
+          let okCount = 0,
+            warnCount = 0,
+            failCount = 0;
+
+          for (const name of names) {
+            const d = scenDetail[name] || {};
+            // Compute worst-of across steps
+            const sevList = ['scaffold', 'env', 'files']
+              .map((k) => d[k]?.severity)
+              .filter(Boolean) as Array<'ok' | 'warn' | 'fail'>;
+            const rank = { ok: 0, warn: 1, fail: 2 } as const;
+            const worst = sevList.reduce<'ok' | 'warn' | 'fail'>(
+              (acc, s) => (rank[acc] >= rank[s] ? acc : s),
+              'ok',
+            );
+
+            if (worst === 'fail') failCount++;
+            else if (worst === 'warn') warnCount++;
+            else okCount++;
+
+            suiteLog.write(`  │ • ${ICON[toSev(worst)]} ${name} — ${worst.toUpperCase()}`);
+
+            const steps: Array<['scaffold' | 'env' | 'files', any]> = [
+              ['scaffold', d.scaffold],
+              ['env', d.env],
+              ['files', d.files],
+            ];
+            for (const [step, info] of steps) {
+              if (!info) continue;
+              const meta = info.meta ?? {};
+              const counts = ['missingCount', 'breachCount', 'unexpectedCount']
+                .map((k) => (meta[k] != null ? `${k.replace('Count', '')}: ${meta[k]}` : null))
+                .filter(Boolean)
+                .join(', ');
+              const note = meta.note ? (counts ? `; ${meta.note}` : meta.note) : '';
+              const extra = counts || note ? `  (${[counts, note].filter(Boolean).join(' ')})` : '';
+              suiteLog.write(
+                `  │     - ${ICON[toSev(info.severity)]} ${step}: ${info.severity.toUpperCase()}${extra}`,
+              );
+            }
+
+            const scenRel = `./e2e/${name}.log`; // relative to the suite log directory (forward slashes)
+            suiteLog.write(`  │     - log: file://${scenRel}`);
+          }
+
+          suiteLog.write(
+            `  └─ (tests: ${names.length}, passed: ${okCount}, failed: ${failCount}, warning: ${warnCount}, skipped: 0)  ────────────────`,
+          );
+        } else {
+          suiteLog.write(`  (no _scenario-detail.json found)`);
+        }
+      } catch (e: any) {
+        suiteLog.write(`  (failed to render consolidated Step 7: ${e?.message ?? String(e)})`);
+      }
 
       suiteLog.step('Global teardown: stop Postgres');
       try {

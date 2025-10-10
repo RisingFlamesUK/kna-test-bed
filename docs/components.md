@@ -14,6 +14,7 @@
   - [`suite/components/docker-suite.ts`](#suitecomponentsdocker-suitets)
   - [`suite/components/pg-env.ts`](#suitecomponentspg-envts)
   - [`suite/components/pg-suite.ts`](#suitecomponentspg-suitets)
+  - [`suite/components/scenario-status.ts`](#suitecomponentsscenario-statusts)
   - [`suite/vitest-reporter.ts`](#suitevitest-reporterts)
   - [`suite/global-setup.ts`](#suiteglobal-setupts)
 
@@ -408,16 +409,17 @@ Throws on Docker/health/TCP/SQL issues; logs details.
 **Status:** Implemented
 
 **Purpose**  
-Compact per-file/per-test summary into `logs/<stamp>/suite.log`, indented beneath the “Run Tests” step.
+Optional per-file/per-test text output and a machine-readable JSON summary used by the suite.log's consolidated Step 7.
 
 **At a glance**
 
-| Behavior        | Notes                                                     |
-| --------------- | --------------------------------------------------------- |
-| Grouped by file | File header with counts + per-test lines                  |
-| Log linking     | `[SCENARIO_LOG] <path>` attached to the correct test line |
-| Buffering       | Flushes after `KNA_LOG_STAMP` is available                |
-| Robust          | Never throws; best-effort logging                         |
+| Behavior             | Notes                                                                 |
+| -------------------- | --------------------------------------------------------------------- |
+| **Quiet by default** | No per-file text unless enabled (see _Controls_).                     |
+| Controls             | Enable text with `--verbose` or `-v`, or `KNA_VITEST_TEXT=1`.         |
+| JSON artifact        | Always writes `logs/<STAMP>/e2e/_vitest-summary.json`.                |
+| No double-reporting  | We do **not** use Vitest’s default reporter. Only this reporter runs. |
+| Robust               | Never throws; JSON write is best-effort.                              |
 
 **Exports**
 

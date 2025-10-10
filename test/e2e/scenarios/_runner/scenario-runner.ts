@@ -113,7 +113,7 @@ function defineScenario(entry: ScenarioEntry, ctx: ResolveCtx) {
           log.write(`envFile=${envFile}`);
           log.write(`manifest=${manifestPath}`);
 
-          await assertEnvMatches({ appDir, manifestPath, log });
+          await assertEnvMatches({ appDir, manifestPath, log, scenarioName: entry.scenarioName });
         }
 
         // 2b) Filesystem assertions (required/forbidden paths via manifest)

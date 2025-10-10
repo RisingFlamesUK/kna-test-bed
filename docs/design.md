@@ -69,7 +69,9 @@
 kna-test-bed
 ├── .tmp                                      # temp directory. Cleaned at the end of a run
 ├── docs
-│   └── design.md
+│   ├── components.md
+│   ├── design.md
+│   └── scenarios.md
 ├── logs
 │   └── <date>
 │       ├── e2e                               # e2e logs per test run
@@ -87,14 +89,23 @@ kna-test-bed
 │   │   ├── logger.ts
 │   │   ├── pg-env.ts
 │   │   ├── pg-suite.ts
-│   │   └── proc.ts
+│   │   ├── proc.ts
+│   │   └── scenario-status.ts
+│   ├── types
+│   │   ├── ambient
+│   │   │   └── picomatch.d.ts
+│   │   ├── fs-assert.ts
+│   │   ├── logger.ts
+│   │   ├── prompts.ts
+│   │   ├── scenario-runner.ts
+│   │   └── scenarios.ts
 │   ├── global-setup.ts                       # suite e.g create/manage containers & postgres
 │   └── vitest-reporter.ts
 ├── test
 │   ├── components                            # assert is used wherever testing expectations
 │   │   ├── auth-assert.ts                    # testing auth routes
 │   │   ├── env-assert.ts                     # testing .env
-│   │   ├── env-update.ts                     # inject env with real settings
+│   │   ├── env-merge.ts                     # inject env with real settings
 │   │   ├── fs-assert.ts                      # testing files as expected
 │   │   ├── http-assert.ts                    # testing routes (not auth)
 │   │   ├── interactive-driver.ts
@@ -103,9 +114,18 @@ kna-test-bed
 │   │   └── server-assert.ts                  # testing scaffolded app server
 │   └── e2e
 │       ├── scenarios
+│       │   ├── _runner
+│       │   │   ├── prompt-map.json
+│       │   │   ├── prompt-map.schema.json
+│       │   │   ├── prompt-map.schema.test.ts
+│       │   │   ├── scenario-runner.ts
+│       │   │   └── types.ts
 │       │   ├── bearer+microsoft
 │       │   │   ├── .real-env
 │       │   │   │   └── real.env              # real .env settings to be injected
+│       │   │   ├── config
+│       │   │   │   ├── answers.json
+│       │   │   │   └── tests.json
 │       │   │   ├── manifest
 │       │   │   │   ├── env.json              # expected env
 │       │   │   │   ├── files.json            # expected files
@@ -114,6 +134,9 @@ kna-test-bed
 │       │   ├── local-only
 │       │   │   ├── .real-env
 │       │   │   │   └── .real.env
+│       │   │   ├── confg
+│       │   │   │   ├── answers.json
+│       │   │   │   └── tests.json
 │       │   │   ├── config
 │       │   │   │   └── answers.json          # for answers file scenario
 │       │   │   ├── manifest
@@ -124,6 +147,9 @@ kna-test-bed
 │       │   └── local+google
 │       │       ├── .real-env
 │       │       │   └── real.env
+│       │       ├── config.json
+│       │       │   ├── answers.json
+│       │       │   └── tests.json
 │       │       ├── manifest
 │       │       │   ├── env.json
 │       │       │   ├── files.json
@@ -133,7 +159,6 @@ kna-test-bed
 ├── package.json
 ├── README.md
 └── vitest.config.ts
-
 ```
 
 ---

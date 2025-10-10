@@ -3,10 +3,12 @@ import { describe, it, expect } from 'vitest';
 
 import { scenarioLoggerFromEnv } from '../../suite/components/logger.ts';
 import { withTempSchema } from '../../suite/components/pg-suite.ts';
+import { CIEmitter } from '../../suite/components/ci-emitter.ts';
 
 describe('suite sanity (shared DB + per-test schema)', () => {
   it('SELECT 1 works and schema round-trip works', async () => {
     const log = scenarioLoggerFromEnv('suite-sentinel');
+    const ci = new CIEmitter();
 
     // Step 1: quick preflight so we fail clearly when PG isn’t available
     log.step('Opening per-test schema via withTempSchema');
@@ -34,19 +36,27 @@ describe('suite sanity (shared DB + per-test schema)', () => {
         'e2e',
         async ({ connect, schema, searchPathSql }) => {
           log.pass(`Shared DB ready: ${schema}`);
+          ci.suiteStep('✅ Docker PG Environment ready');
 
           log.step('Running SELECT 1');
           const c = await connect();
           const r = await c.query('SELECT 1 AS one');
           expect(r.rows[0].one).toBe(1);
           log.pass('SELECT 1 succeeded');
+          ci.suiteStep('✅ SELECT 1: OK');
 
-          log.step('Creating table and inserting rows');
+          log.step('Testing schema round-trip');
           await c.query(
             `${searchPathSql}; CREATE TABLE demo_t(x int); INSERT INTO demo_t(x) VALUES(10),(20);`,
           );
           const got = await c.query('SELECT COUNT(*)::int AS n FROM demo_t;');
           expect(got.rows[0].n).toBe(2);
+          ci.suiteStep('✅ Schema round-trip: OK');
+          ci.suiteEnd(
+            'suite.test.ts • Suite sanity > SELECT 1 works and schema round-trip works',
+            'e2e/suite-sentinel.log',
+            { failed: 0, skipped: 0 },
+          );
           log.pass('Schema round-trip (create/insert/select) succeeded');
 
           await c.end();

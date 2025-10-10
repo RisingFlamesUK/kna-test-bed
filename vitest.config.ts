@@ -1,20 +1,43 @@
 // vitest.config.ts
 import { defineConfig } from 'vitest/config';
 
-import SuiteReporter from './suite/vitest-reporter.ts';
+import KnaSequencer from './suite/sequencer.ts';
 
 export default defineConfig({
   test: {
     environment: 'node',
-    // Run once, before all test files:
     globalSetup: './suite/global-setup.ts',
-    include: ['test/**/*.test.ts', 'test/**/*.spec.ts'],
-    exclude: ['**/node_modules/**', '**/dist/**', '**/.{idea,git,cache,output,temp}/**'],
-    reporters: [['default', { summary: false }], new SuiteReporter()],
+
+    // Run in-band to keep CI/progressive output strictly ordered
+    poolOptions: {
+      threads: {
+        singleThread: true,
+      },
+    },
+    // include: ['test/**/*.test.ts', 'test/**/*.spec.ts'],
+    // exclude: ['**/node_modules/**', '**/dist/**', '**/.{idea,git,cache,output,temp}/**'],
+
+    // Deterministic file order: Suite -> Schema -> Scenarios -> other
+    sequence: {
+      sequencer: KnaSequencer,
+      concurrent: false,
+      shuffle: false,
+      hooks: 'list',
+    },
+
+    // Don’t bail on first failure; we want a full run summary
+    bail: 0,
+
+    // Keep interop default to load ESM reporters/helpers smoothly
+    deps: {
+      interopDefault: true,
+    },
+
+    // Reporters: Vitest default + your custom reporter file
+    reporters: ['./suite/vitest-reporter.ts'],
+
     // Handy defaults for slower E2E:
-    testTimeout: 120_000,
+    testTimeout: 240_000,
     hookTimeout: 120_000,
-    // Optional: isolate false if you share state (we don't here)
-    // isolate: true,
   },
 });

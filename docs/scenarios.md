@@ -21,6 +21,7 @@ This doc explains the JSON configs driving scenario tests: **tests.json**, **pro
   - [Semantics](#semantics)
   - [Outcome](#outcome)
   - [Path resolution](#path-resolution)
+- [Artifacts & logs](#artifacts--logs)
 - [Best practices](#best-practices)
   - [Example (best practices)](#example-best-practices)
 
@@ -311,6 +312,19 @@ Same resolution order as other manifests:
 - Always ignore volatile trees like `node_modules/**`, `.git/**`.
 - Reserve `forbidden` for **must-not-ship** artefacts; keep it small and explicit.
 - Prefer `prompt-map.json` + `interactive.include` over embedding concrete prompts in `tests.json`.
+
+---
+
+## Artifacts & logs
+
+During a run the suite emits both human-readable logs and JSON artifacts:
+
+- `logs/<STAMP>/suite.log` — top-level suite log (Docker/PG) plus consolidated **Step 7** with Suite/Schema/Scenario summaries.
+- `logs/<STAMP>/e2e/_scenario-detail.json` — step-level severities per scenario (single source of truth).
+- `logs/<STAMP>/e2e/_vitest-summary.json` — Vitest per-file counts/durations (written by the custom reporter).
+- Per-scenario logs: `logs/<STAMP>/e2e/<scenario>.log`. Step 7 links these as `./e2e/<scenario>.log` (relative). CI may also print an absolute `file://` URL.
+
+---
 
 ### Example (best practices)
 
