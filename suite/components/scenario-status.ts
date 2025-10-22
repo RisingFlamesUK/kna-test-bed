@@ -1,7 +1,7 @@
 // suite/components/scenario-status.ts
 import * as path from 'node:path';
 import * as fs from 'fs-extra';
-import { buildLogRoot } from './logger.ts';
+import { scenarioDetailPath } from './detail-io.ts';
 
 export type ScenarioSeverity = 'ok' | 'warn' | 'fail';
 const rank: Record<ScenarioSeverity, number> = { ok: 0, warn: 1, fail: 2 };
@@ -31,10 +31,7 @@ export type ScenarioDetailStore = Record<
 >;
 
 function detailPathFromEnv(): string | null {
-  const stamp = process.env.KNA_LOG_STAMP;
-  if (!stamp) return null;
-  // logs/<stamp>/e2e/_scenario-detail.json
-  return path.join(buildLogRoot(stamp), 'e2e', '_scenario-detail.json');
+  return scenarioDetailPath();
 }
 
 function updateDetailArtifact(

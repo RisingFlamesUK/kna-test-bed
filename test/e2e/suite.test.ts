@@ -1,14 +1,19 @@
 // test/e2e/suite.test.ts
+import path from 'node:path';
 import { describe, it, expect } from 'vitest';
 
 import { scenarioLoggerFromEnv } from '../../suite/components/logger.ts';
+import { createCI } from '../../suite/components/ci.ts';
+import { recordSuiteStep } from '../../suite/components/area-detail.ts';
 import { withTempSchema } from '../../suite/components/pg-suite.ts';
-import { CIEmitter } from '../../suite/components/ci-emitter.ts';
+// Emit steps via CI console for streaming; reporter will capture icon lines
 
-describe('suite sanity (shared DB + per-test schema)', () => {
-  it('SELECT 1 works and schema round-trip works', async () => {
-    const log = scenarioLoggerFromEnv('suite-sentinel');
-    const ci = new CIEmitter();
+describe('Database Environment Setup', () => {
+  
+  it('should connect to Postgres and handle per-test schemas', async () => {
+  const log = scenarioLoggerFromEnv('suite-sentinel');
+  const ci = createCI();
+  const t0 = Date.now();
 
     // Step 1: quick preflight so we fail clearly when PG isn’t available
     log.step('Opening per-test schema via withTempSchema');
@@ -36,14 +41,15 @@ describe('suite sanity (shared DB + per-test schema)', () => {
         'e2e',
         async ({ connect, schema, searchPathSql }) => {
           log.pass(`Shared DB ready: ${schema}`);
-          ci.suiteStep('✅ Docker PG Environment ready');
+          // Record step for reporter JSON-backed streaming
+          recordSuiteStep('ok', `Shared DB ready: ${schema}`);
 
           log.step('Running SELECT 1');
           const c = await connect();
           const r = await c.query('SELECT 1 AS one');
           expect(r.rows[0].one).toBe(1);
           log.pass('SELECT 1 succeeded');
-          ci.suiteStep('✅ SELECT 1: OK');
+          recordSuiteStep('ok', 'SELECT 1 succeeded');
 
           log.step('Testing schema round-trip');
           await c.query(
@@ -51,12 +57,12 @@ describe('suite sanity (shared DB + per-test schema)', () => {
           );
           const got = await c.query('SELECT COUNT(*)::int AS n FROM demo_t;');
           expect(got.rows[0].n).toBe(2);
-          ci.suiteStep('✅ Schema round-trip: OK');
-          ci.suiteEnd(
-            'suite.test.ts • Suite sanity > SELECT 1 works and schema round-trip works',
-            'e2e/suite-sentinel.log',
-            { failed: 0, skipped: 0 },
-          );
+          recordSuiteStep('ok', 'Schema round-trip (create/insert/select): OK');
+
+          // Explicit log link for reporter to pick up
+          const dt = Date.now() - t0;
+          ci.write('log: file://./e2e/suite-sentinel.log');
+          
           log.pass('Schema round-trip (create/insert/select) succeeded');
 
           await c.end();

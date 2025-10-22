@@ -9,30 +9,32 @@ export default class KnaSequencer extends BaseSequencer {
     const toPosix = (p: string) => p.split(path.sep).join('/');
 
     const getPath = (spec: TestSpecification): string => {
-      // Vitest v3 tuple: [project, file, { pool }]
-      //                0          1         2
-      return spec[1];
+      // Support both tuple form [project, filepath, { pool }] and object form { filepath }
+      if (Array.isArray(spec)) return (spec[1] as string) || '';
+      const anySpec = spec as any;
+      return anySpec?.filepath || anySpec?.file || '';
     };
 
     const rank = (spec: TestSpecification) => {
       const p = toPosix(getPath(spec));
       // 1) Suite first
-      if (/^test\/e2e\/suite\.test\.ts$/i.test(p)) return 0;
+      if (/(?:^|\/)test\/e2e\/suite\.test\.ts$/i.test(p)) return 0;
       // 2) Schema next
-      if (/^test\/e2e\/scenarios\/_runner\/prompt-map\.schema\.test\.ts$/i.test(p)) return 1;
+      if (/(?:^|\/)test\/e2e\/scenarios\/_runner\/prompt-map\.schema\.test\.ts$/i.test(p)) return 1;
       // 3) Scenario tests (e.g., local-only/*.test.ts)
-      if (/^test\/e2e\/scenarios\/.+\/.+\.test\.ts$/i.test(p)) return 2;
+      if (/(?:^|\/)test\/e2e\/scenarios\/[^/]+\/[^/]+\.test\.ts$/i.test(p)) return 2;
       // 4) Everything else
       return 3;
     };
 
-    return [...files].sort((a, b) => {
+    const sorted = [...files].sort((a, b) => {
       const ra = rank(a);
       const rb = rank(b);
       if (ra !== rb) return ra - rb;
       // stable tiebreak by path
       return getPath(a).localeCompare(getPath(b));
     });
+    return sorted;
   }
 
   // In-band; no sharding transforms needed

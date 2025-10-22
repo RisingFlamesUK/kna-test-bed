@@ -4,7 +4,8 @@ import { readFile } from 'node:fs/promises';
 import * as path from 'node:path';
 import { describe, it, expect } from 'vitest';
 
-import { scenarioLoggerFromEnv } from '../../../../suite/components/logger.ts';
+import { scenarioLoggerFromEnv, buildScenarioLogPath } from '../../../../suite/components/logger.ts';
+import { createCI } from '../../../../suite/components/ci.ts';
 import { assertScaffoldCommand } from '../../../components/scaffold-command-assert.ts';
 import { assertEnvMatches } from '../../../components/env-assert.ts';
 import type { ScenarioConfigFile, ScenarioEntry, PromptMap } from './types.ts';
@@ -13,6 +14,7 @@ import { assertFiles } from '../../../components/fs-assert.ts';
 
 type ResolveCtx = {
   configDir: string;
+  configFileAbs: string;
   callerDir?: string;
   scenarioRootFromConfig?: string; // parent of config dir if config is under <scenario>/config
   manifestBase?: string;
@@ -37,6 +39,7 @@ export async function runScenariosFromFile(configPath: string, opts?: { callerDi
 
   const ctx: ResolveCtx = {
     configDir,
+    configFileAbs: abs,
     callerDir: opts?.callerDir,
     scenarioRootFromConfig,
     manifestBase,
@@ -62,6 +65,11 @@ function defineScenario(entry: ScenarioEntry, ctx: ResolveCtx) {
 
     async () => {
       const log = scenarioLoggerFromEnv(entry.scenarioName);
+      const ci = createCI();
+      // Tell reporter to show config file in header and emit group bullet
+      console.log(`/* CI: AreaFile ${ctx.configFileAbs} */`);
+      ci.boxLine(`• Testing ${entry.scenarioName}...`);
+      const t0 = Date.now();
 
       let appDir = '';
       let cleanup: (() => Promise<void>) | undefined;
@@ -83,13 +91,20 @@ function defineScenario(entry: ScenarioEntry, ctx: ResolveCtx) {
             })
           : undefined;
 
-        const result = await assertScaffoldCommand({
-          scenarioName: entry.scenarioName,
-          flags,
-          answersFile: resolvedAnswers,
-          log,
-          interactive: interactiveOpts,
-        });
+        let result;
+        try {
+          result = await assertScaffoldCommand({
+            scenarioName: entry.scenarioName,
+            flags,
+            answersFile: resolvedAnswers,
+            log,
+            interactive: interactiveOpts,
+          });
+          ci.testStep('scaffold: OK', 'ok');
+        } catch (e) {
+          ci.testStep('scaffold: Failed', 'fail');
+          throw e;
+        }
 
         appDir = result.appDir;
         cleanup = result.cleanup;
@@ -113,7 +128,13 @@ function defineScenario(entry: ScenarioEntry, ctx: ResolveCtx) {
           log.write(`envFile=${envFile}`);
           log.write(`manifest=${manifestPath}`);
 
-          await assertEnvMatches({ appDir, manifestPath, log, scenarioName: entry.scenarioName });
+          try {
+            await assertEnvMatches({ appDir, manifestPath, log, scenarioName: entry.scenarioName });
+            ci.testStep('env manifest checks: OK', 'ok');
+          } catch (e) {
+            ci.testStep('env manifest checks: Failed', 'fail');
+            throw e;
+          }
         }
 
         // 2b) Filesystem assertions (required/forbidden paths via manifest)
@@ -124,13 +145,19 @@ function defineScenario(entry: ScenarioEntry, ctx: ResolveCtx) {
             { kind: 'manifest', log },
           );
 
-          await assertFiles({
-            cwd: appDir,
-            manifest: JSON.parse(await readFile(filesManifestPath, 'utf8')),
-            manifestLabel: filesManifestPath,
-            scenarioName: entry.scenarioName,
-            logger: log,
-          });
+          try {
+            await assertFiles({
+              cwd: appDir,
+              manifest: JSON.parse(await readFile(filesManifestPath, 'utf8')),
+              manifestLabel: filesManifestPath,
+              scenarioName: entry.scenarioName,
+              logger: log,
+            });
+            ci.testStep('files manifest checks: OK', 'ok');
+          } catch (e) {
+            ci.testStep('files manifest checks: Failed', 'fail');
+            throw e;
+          }
         }
 
         // 3) Merge step — intentionally NOT IMPLEMENTED yet (placeholder)
@@ -138,8 +165,28 @@ function defineScenario(entry: ScenarioEntry, ctx: ResolveCtx) {
           log.step(
             `Merge: mergeEnv present in config (env="${entry.tests.mergeEnv.env}") — skipping (not implemented by runner)`,
           );
+          // Mark mergeEnv as explicitly skipped (↩️)
+          ci.testStep('mergeEnv: skipped (not implemented)', 'skip');
+        }
+
+        // Emit an explicit per-scenario log line now (primary emission)
+        {
+          const stamp = process.env.KNA_LOG_STAMP || '';
+          const candidate = stamp
+            ? buildScenarioLogPath(stamp, entry.scenarioName)
+            : path.join('logs', 'latest', 'e2e', `${entry.scenarioName}.log`);
+          const absLog = path.resolve(candidate).replace(/\\/g, '/').replace(/ /g, '%20');
+          ci.testStep(`log: file:///${absLog}`, 'ok');
         }
       } finally {
+        // Backstop: ensure a log line is present if it wasn't already
+        // (Reporter will handle duplicates gracefully by printing in order.)
+        const stamp = process.env.KNA_LOG_STAMP || '';
+        const candidate = stamp
+          ? buildScenarioLogPath(stamp, entry.scenarioName)
+          : path.join('logs', 'latest', 'e2e', `${entry.scenarioName}.log`);
+        const absLog = path.resolve(candidate).replace(/\\/g, '/').replace(/ /g, '%20');
+        ci.testStep(`log: file:///${absLog}`, 'ok');
         if (entry.tests.cleanup && cleanup) await cleanup();
         if ((log as any)?.close) await (log as any).close();
       }

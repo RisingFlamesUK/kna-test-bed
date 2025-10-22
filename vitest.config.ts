@@ -14,8 +14,8 @@ export default defineConfig({
         singleThread: true,
       },
     },
-    // include: ['test/**/*.test.ts', 'test/**/*.spec.ts'],
-    // exclude: ['**/node_modules/**', '**/dist/**', '**/.{idea,git,cache,output,temp}/**'],
+    include: ['test/e2e/**/*.test.ts'],
+    exclude: ['**/node_modules/**', '**/dist/**', '**/.{idea,git,cache,output,temp}/**'],
 
     // Deterministic file order: Suite -> Schema -> Scenarios -> other
     sequence: {
@@ -33,11 +33,18 @@ export default defineConfig({
       interopDefault: true,
     },
 
-    // Reporters: Vitest default + your custom reporter file
-    reporters: ['./suite/vitest-reporter.ts'],
+  // Allow reporter to intercept console output from tests for boxing/order
+  // disableConsoleIntercept: true,
 
-    // Handy defaults for slower E2E:
-    testTimeout: 240_000,
-    hookTimeout: 120_000,
+    // Use our test reporter only
+    reporters: ['./suite/vitest-reporter-test.ts'],
+
+    // Output configuration - let our reporter handle all output
+    silent: true,
+    logHeapUsage: false,
+
+    // Extended timeouts to accommodate real-world npm install times
+    testTimeout: 600_000,  // 10 minutes
+    hookTimeout: 600_000   // 10 minutes
   },
 });

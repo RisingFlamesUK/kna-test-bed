@@ -14,6 +14,7 @@ import { type Logger } from '../../suite/types/logger.ts';
 import { execBoxed } from '../../suite/components/proc.ts';
 import { runInteractive, Prompt } from './interactive-driver.ts';
 import { recordScenarioSeverityFromEnv } from '../../suite/components/scenario-status.ts';
+import { createCI } from '../../suite/components/ci.ts';
 
 export type ScaffoldCmdOpts = {
   scenarioName: string; // e.g. "local-only"
@@ -104,11 +105,13 @@ export async function assertScaffoldCommand(opts: ScaffoldCmdOpts): Promise<Scaf
     args.push('--answers-file', absAnswers);
   }
 
-  // Log the exact invocation for reproducibility
   log.step(`Scaffold: invoking generator`);
-  log.write(`cmd=${cmd}`);
-  log.write(`args=${JSON.stringify(args)}`);
   log.write(`cwd=${process.cwd()}`);
+  
+  // Emit CI progress
+  const ci = createCI();
+  ci.testStep(`⏳ Installing dependencies - this can take 5+ minutes...`, 'ok');
+  ci.testStep(`💡 Running npm install to simulate real user experience`, 'ok');
 
   // 4) IO mode: interactive vs silent/answers
   // Interactive when: no answers file AND flags do not include --silent
