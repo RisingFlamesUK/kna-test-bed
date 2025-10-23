@@ -8,6 +8,8 @@
 ## Index
 
 - Suite Components
+  - [`suite/vitest-reporter.ts`](#suitevitest-reporterts)
+  - [`suite/global-setup.ts`](#suiteglobal-setupts)
   - [`suite/components/constants.ts`](#suitecomponentsconstantsts)
   - [`suite/components/logger.ts`](#suitecomponentsloggerts)
   - [`suite/components/proc.ts`](#suitecomponentsprocts)
@@ -15,13 +17,18 @@
   - [`suite/components/pg-env.ts`](#suitecomponentspg-envts)
   - [`suite/components/pg-suite.ts`](#suitecomponentspg-suitets)
   - [`suite/components/scenario-status.ts`](#suitecomponentsscenario-statusts)
-  - [`suite/vitest-reporter.ts`](#suitevitest-reporterts)
-  - [`suite/global-setup.ts`](#suiteglobal-setupts)
+  - [`suite/components/ci.ts`](#suitecomponentscits)
+  - [`suite/components/format.ts`](#suitecomponentsformatts)
+  - [`suite/components/test-area.ts`](#suitecomponentstest-areats)
+  - [`suite/components/detail-io.ts`](#suitecomponentsdetail-iots)
+  - [`suite/components/area-detail.ts`](#suitecomponentsarea-detailts)
+  - [`suite/components/area-recorder.ts`](#suitecomponentsarea-recorderts)
 
 - Test Components
   - [`test/components/scaffold-command-assert.ts`](#testcomponentsscaffold-command-assertts)
   - [`test/components/interactive-driver.ts`](#testcomponentsinteractive-driverts)
   - [`test/components/env-assert.ts`](#testcomponentsenv-assertts)
+  - [`test/components/fs-assert.ts`](#testcomponentsfs-assertts)
 
 - Scenario Runner
   - [`test/e2e/scenarios/_runner/types.ts`](#teste2escenarios_runnertypests)
@@ -29,11 +36,84 @@
 
 - Planned Components
   - [`test/components/server-assert.ts`](#testcomponentsserver-assertts-planned)
-  - [`test/components/fs-assert.ts`](#testcomponentsfs-assertts)
   - [`test/components/http-assert.ts`](#testcomponentshttp-assertts-planned)
   - [`test/components/env-update.ts`](#testcomponentsenv-updatets-planned)
   - [`test/components/pg-assert.ts`](#testcomponentspg-assertts-planned)
   - [`test/components/auth-assert.ts`](#testcomponentsauth-assertts-planned)
+
+---
+
+## suite/vitest-reporter.ts
+
+**Status:** Implemented
+
+**Purpose**  
+Deterministic, progressive streaming of Suite → Schema → Scenarios using JSON-backed detail files. Quiet by default; can print per-file text. Emits immediate log links and footers without pauses.
+
+**At a glance**
+
+| Behavior         | Notes                                                                                                                                                                                                   |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Quiet by default | No per-file text unless enabled (see Controls).                                                                                                                                                         |
+| Controls         | Enable text with `--verbose`/`-v` or `KNA_VITEST_TEXT=1`.                                                                                                                                               |
+| JSON artifacts   | Always writes `e2e/_vitest-summary.json`. Reads `e2e/_suite-detail.json`, `e2e/_schema-detail.json`, and `e2e/_scenario-detail.json` to stream step lines and compute accurate counts (including skip). |
+| Order            | Activates and streams in a stable order: Suite → Schema → Scenarios.                                                                                                                                    |
+| Robust           | Ignores taskless console noise; never throws; prints default log links if tests forget to emit one.                                                                                                     |
+
+**Exports**
+
+```ts
+export default class TestReporter {
+  /* Vitest v3 reporter */
+}
+```
+
+**Inputs/Outputs**  
+Consumes runner events; writes to `suite.log`; reads/writes JSON detail artifacts under `logs/<STAMP>/…`.
+
+**Dependencies**  
+`path`, `url`, `suite/components/logger.ts`, `suite/components/detail-io.ts`, `suite/components/ci.ts`, `suite/components/constants.ts`
+
+**Behavior & details**  
+Prints group bullets, then step lines as they appear in JSON, then a summary + immediate log link + footer. De-duplicates log pointers and closes areas promptly to avoid trailing pauses.
+
+**Error behavior**  
+Never throws; drops lines on hard failures.
+
+---
+
+## suite/global-setup.ts
+
+**Status:** Implemented
+
+**Purpose**  
+Vitest global setup: prepare Docker + Postgres, stamp logs, publish env, and return teardown.
+
+**At a glance**
+
+| Phase    | Actions                                                                             |
+| -------- | ----------------------------------------------------------------------------------- |
+| Setup    | Docker check → stale cleanup → ensure image → run container → probes                |
+| Publish  | `KNA_LOG_STAMP`, `SUITE_PG_HOST`, `SUITE_PG_PORT`, `SUITE_PG_USER`, `SUITE_PG_PASS` |
+| Teardown | Stop container, close log, print logs pointer                                       |
+
+**Exports**
+
+```ts
+export default async function globalSetup(): Promise<void | (() => Promise<void>)>;
+```
+
+**Inputs/Outputs**  
+Writes `logs/<stamp>/suite.log`, sets env, returns teardown.
+
+**Dependencies**  
+`./components/logger.ts`, `./components/docker-suite.ts`, `./components/pg-suite.ts`
+
+**Behavior & details**  
+Emits a clear “Run Tests” anchor for the reporter; prints a pointer to logs root at the end.
+
+**Error behavior**  
+Logs fail lines and still returns a teardown that prints the logs pointer.
 
 ---
 
@@ -46,11 +126,13 @@ Shared constants for labels and temp directory paths.
 
 **At a glance**
 
-| Name           | Meaning                                   |
-| -------------- | ----------------------------------------- |
-| `KNA_LABEL`    | Docker label used to tag suite resources  |
-| `TMP_DIR_NAME` | Basename for temp workspace (`.tmp`)      |
-| `KNA_TMP_DIR`  | Optional override for temp root (env var) |
+| Name            | Meaning                                   |
+| --------------- | ----------------------------------------- |
+| `KNA_LABEL`     | Docker label used to tag suite resources  |
+| `TMP_DIR_NAME`  | Basename for temp workspace (`.tmp`)      |
+| `KNA_TMP_DIR`   | Optional override for temp root (env var) |
+| `SUITE_BULLET`  | Reporter bullet for Suite group header    |
+| `SCHEMA_BULLET` | Reporter bullet for Schema group header   |
 
 **Exports**
 
@@ -58,6 +140,8 @@ Shared constants for labels and temp directory paths.
 export const KNA_LABEL: string;
 export const TMP_DIR_NAME: string;
 export const KNA_TMP_DIR: string;
+export const SUITE_BULLET: string;
+export const SCHEMA_BULLET: string;
 ```
 
 **Inputs/Outputs**  
@@ -67,7 +151,7 @@ Reads optional env vars; no IO.
 None
 
 **Behavior & details**  
-Used by Docker helpers and scaffold helpers for consistent naming/paths.
+Used by Docker helpers and scaffold helpers for consistent naming/paths. Reporter bullets keep output phrasing consistent.
 
 **Error behavior**  
 N/A
@@ -404,77 +488,288 @@ Throws on Docker/health/TCP/SQL issues; logs details.
 
 ---
 
-## suite/vitest-reporter.ts
+## suite/components/scenario-status.ts
 
 **Status:** Implemented
 
 **Purpose**  
-Optional per-file/per-test text output and a machine-readable JSON summary used by the suite.log's consolidated Step 7.
+Record per-scenario per-step severity into the JSON detail artifact consumed by the reporter.
 
 **At a glance**
 
-| Behavior             | Notes                                                                 |
-| -------------------- | --------------------------------------------------------------------- |
-| **Quiet by default** | No per-file text unless enabled (see _Controls_).                     |
-| Controls             | Enable text with `--verbose` or `-v`, or `KNA_VITEST_TEXT=1`.         |
-| JSON artifact        | Always writes `logs/<STAMP>/e2e/_vitest-summary.json`.                |
-| No double-reporting  | We do **not** use Vitest’s default reporter. Only this reporter runs. |
-| Robust               | Never throws; JSON write is best-effort.                              |
+| Concept     | Meaning                                                                                                       |
+| ----------- | ------------------------------------------------------------------------------------------------------------- |
+| Steps       | `scaffold`, `env`, `files`                                                                                    |
+| Severities  | `ok`, `warn`, `fail` (worst-of merge per step; skip is handled by the reporter via Vitest, not recorded here) |
+| Store shape | `{ [scenarioName]: { [step]: { severity, meta? } } }`                                                         |
 
 **Exports**
 
 ```ts
-export default class SuiteReporter {
-  /* Vitest v3 reporter */
+export type ScenarioSeverity = 'ok' | 'warn' | 'fail';
+export type ScenarioStep = 'scaffold' | 'env' | 'files';
+export type ScenarioDetailMeta = {
+  missingCount?: number;
+  breachCount?: number;
+  unexpectedCount?: number;
+  note?: string;
+};
+export function recordScenarioSeverityFromEnv(
+  scenario: string,
+  next: ScenarioSeverity,
+  opts?: { step?: ScenarioStep; meta?: ScenarioDetailMeta },
+): void;
+```
+
+**Inputs/Outputs**  
+Reads current run stamp from env; updates `logs/<STAMP>/e2e/_scenario-detail.json` (append/merge).
+
+**Dependencies**  
+[`suite/components/detail-io.ts`](#suitecomponentsdetail-iots), `fs-extra`, `path`
+
+**Behavior & details**
+
+- Merges severity by worst-of for each step to preserve failures.
+- When called without an explicit `step`, defaults to projecting onto `env` for back-compat.
+
+**Error behavior**  
+No-ops if stamp missing; write errors propagate.
+
+---
+
+## suite/components/ci.ts
+
+**Status:** Implemented
+
+**Purpose**  
+Shared console helpers used by the reporter to render tidy, consistent output in the terminal (icons, boxed sections, aligned footers).
+
+**At a glance**
+
+| Capability | Notes                                                             |
+| ---------- | ----------------------------------------------------------------- |
+| Icons      | Centralized mapping via `suite/types/ui.ts` for ok/warn/fail/skip |
+| Boxes      | `boxStart/boxLine/boxEnd` with width/indent control               |
+| Steps      | `testStep`, `suiteStep`, `schemaStep` render standard bullets     |
+| Groups     | `testAreaStart/End` prints a header and a footer with counts      |
+
+**Exports**
+
+```ts
+export function createCI(): import('../types/ci.ts').CI;
+```
+
+**Inputs/Outputs**  
+Writes human-readable lines to stdout only. No file I/O.
+
+**Dependencies**  
+`../types/ci.ts`, `../types/ui.ts`, and internal helpers. Used by the reporter.
+
+**Behavior & details**
+
+- Consistent box drawing with adjustable width/indent.
+- Safe to call multiple times; group headers are idempotent per test area.
+- Scenario helpers (`scenarioOpen/…/scenarioCloseSummary`) produce compact group summaries.
+
+**Error behavior**  
+Never throws by design; `close()` resolves immediately.
+
+---
+
+## suite/components/format.ts
+
+**Status:** Implemented
+
+**Purpose**  
+Pure formatting helpers shared by `ci.ts` and `logger.ts` for box rules and indentation.
+
+**At a glance**
+
+| Helper              | Purpose                          |
+| ------------------- | -------------------------------- |
+| `DEFAULT_BOX_WIDTH` | Standard width for boxed output  |
+| `fitLabel`          | Truncate labels without ellipsis |
+| `makeRule`          | Build top/bottom rule lines      |
+| `resolveIndent`     | Normalize indent value           |
+
+**Exports**
+
+```ts
+export const DEFAULT_BOX_WIDTH: number;
+export function fitLabel(label: string, maxLen: number): string;
+export function makeRule(openGlyph: '┌' | '└', label: string, width: number): string;
+export function resolveIndent(indent: string | number | undefined, defaultIndent: string): string;
+```
+
+**Inputs/Outputs**  
+Pure; no IO.
+
+**Dependencies**  
+None
+
+**Behavior & details**  
+Used to keep box drawing consistent and prevent overflows.
+
+**Error behavior**  
+N/A
+
+---
+
+## suite/components/test-area.ts
+
+**Status:** Implemented
+
+**Purpose**  
+Lightweight model for a test “area” used by `ci.ts` to track headers, steps, and footer counts.
+
+**At a glance**
+
+| Property/Method       | Description                                   |
+| --------------------- | --------------------------------------------- |
+| `TestArea.absFileUrl` | Make file:/// URL from abs path               |
+| `TestArea.relFileUrl` | Make relative file URL for logs               |
+| `addStep`             | Push a step and update counts                 |
+| `getCounts`           | Retrieve `{ total, passed, failed, skipped }` |
+
+**Exports**
+
+```ts
+export type TestAreaCounts = { total: number; passed: number; failed: number; skipped: number };
+export class TestArea {
+  /* ctor(title,filePath,indent?), helpers, counts */
 }
 ```
 
 **Inputs/Outputs**  
-Consumes runner events; writes to `suite.log`.
+Pure model; no external IO.
 
 **Dependencies**  
-`path`, `url`, `suite/components/logger.ts`
+`path`, [`suite/types/severity.ts`](#suitecomponentsscenario-statusts)
 
 **Behavior & details**  
-Formats durations, aligns bullets, avoids cross-linking logs.
+Encapsulates URLs and counters for consistent CI rendering.
 
 **Error behavior**  
-Never throws; drops lines on hard failures.
+N/A
 
 ---
 
-## suite/global-setup.ts
+## suite/components/detail-io.ts
 
 **Status:** Implemented
 
 **Purpose**  
-Vitest global setup: prepare Docker + Postgres, stamp logs, publish env, and return teardown.
+Shared helpers for reading/writing JSON detail artifacts and computing their paths from the current run stamp.
 
 **At a glance**
 
-| Phase    | Actions                                                              |
-| -------- | -------------------------------------------------------------------- | ---- | ---- | ----- |
-| Setup    | Docker check → stale cleanup → ensure image → run container → probes |
-| Publish  | `KNA_LOG_STAMP`, `SUITE_PG_HOST                                      | PORT | USER | PASS` |
-| Teardown | Stop container, close log, print logs pointer                        |
+| Helper                 | Purpose                             |
+| ---------------------- | ----------------------------------- |
+| `stampFromEnv()`       | Read current run stamp from env     |
+| `loadJsonSafe()`       | Read JSON with a safe fallback      |
+| `saveJson()`           | Ensure dir and write pretty JSON    |
+| `suiteDetailPath()`    | Path to `e2e/_suite-detail.json`    |
+| `schemaDetailPath()`   | Path to `e2e/_schema-detail.json`   |
+| `scenarioDetailPath()` | Path to `e2e/_scenario-detail.json` |
 
 **Exports**
 
 ```ts
-export default async function globalSetup(): Promise<void | (() => Promise<void>)>;
+export function stampFromEnv(): string | null;
+export function ensureDir(p: string): void;
+export function loadJsonSafe<T>(p: string, fallback: T): T;
+export function saveJson(p: string, data: any): void;
+export function suiteDetailPath(): string | null; // logs/<STAMP>/e2e/_suite-detail.json
+export function schemaDetailPath(): string | null; // logs/<STAMP>/e2e/_schema-detail.json
+export function scenarioDetailPath(): string | null; // logs/<STAMP>/e2e/_scenario-detail.json
 ```
 
 **Inputs/Outputs**  
-Writes `logs/<stamp>/suite.log`, sets env, returns teardown.
+Reads `process.env.KNA_LOG_STAMP` to derive the current run stamp. Loads and writes JSON files under `logs/<STAMP>/…`.
 
 **Dependencies**  
-`./components/logger.ts`, `./components/docker-suite.ts`, `./components/pg-suite.ts`
+`fs-extra`, `path`, [`suite/components/logger.ts`](#suitecomponentsloggerts) (`buildLogRoot`)
 
-**Behavior & details**  
-Emits a clear “Run Tests” anchor for the reporter; prints a pointer to logs root at the end.
+**Behavior & details**
+
+- `stampFromEnv()` returns `null` when no stamp is present (e.g., outside tests).
+- `loadJsonSafe(p, fallback)` returns `fallback` on any read/parse error.
+- `saveJson(p, data)` ensures the parent directory exists and writes pretty JSON (2-space indent).
+- Path helpers return `null` if the stamp is missing.
 
 **Error behavior**  
-Logs fail lines and still returns a teardown that prints the logs pointer.
+Never throws on read; returns `fallback`. Write errors from `saveJson` will surface (no swallow) to signal disk problems.
+
+**Notes**  
+These artifacts are the single source of truth for streaming counts in the reporter.
+
+---
+
+## suite/components/area-detail.ts
+
+**Status:** Implemented
+
+**Purpose**  
+Append-only recorders for non-scenario areas: Suite and Schema.
+
+**At a glance**
+
+| API                | Effect                                                   |
+| ------------------ | -------------------------------------------------------- |
+| `recordSuiteStep`  | Append `{severity,message}` to `e2e/_suite-detail.json`  |
+| `recordSchemaStep` | Append `{severity,message}` to `e2e/_schema-detail.json` |
+
+**Exports**
+
+```ts
+export type AreaStep = { severity: import('../types/severity.ts').Sev; message: string };
+export function recordSuiteStep(severity: Sev, message: string): void;
+export function recordSchemaStep(severity: Sev, message: string): void;
+```
+
+**Inputs/Outputs**  
+Writes JSON arrays in the current run’s logs folder. No console output.
+
+**Dependencies**  
+[`suite/components/detail-io.ts`](#suitecomponentsdetail-iots), [`suite/types/severity.ts`](#suitecomponentsscenario-statusts)
+
+**Behavior & details**  
+Appends steps to `e2e/_suite-detail.json` and `e2e/_schema-detail.json`. Supports severities: `ok | warn | fail | skip`.
+
+**Error behavior**  
+If no `KNA_LOG_STAMP` is present, the functions are no-ops. Write errors propagate to the caller.
+
+---
+
+## suite/components/area-recorder.ts
+
+**Status:** Implemented
+
+**Purpose**  
+Lightweight façade re-exporting the scenario/non-scenario step recorders for convenient imports in tests.
+
+**At a glance**
+
+| Export             | From                                  |
+| ------------------ | ------------------------------------- |
+| `recordSuiteStep`  | `suite/components/area-detail.ts`     |
+| `recordSchemaStep` | `suite/components/area-detail.ts`     |
+| Scenario recorders | `suite/components/scenario-status.ts` |
+
+**Exports**  
+Re-exports from `area-detail.ts` and `scenario-status.ts`.
+
+**Inputs/Outputs**  
+None at module level; acts as a façade only.
+
+**Dependencies**  
+`./area-detail.ts`, `./scenario-status.ts`
+
+**Behavior & details**  
+Provides a stable import surface (`area-recorder`) so tests don’t need to know individual module paths.
+
+**Error behavior**  
+N/A (re-exports only).
 
 ---
 

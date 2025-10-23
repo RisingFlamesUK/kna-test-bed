@@ -2,28 +2,36 @@
 
 All notable changes to this project will be documented in this file.
 
-## [0.4.1] – 2025-10-09
+## [0.4.1] – 2025-10-23
 
 ### Added
 
-- **Consolidated Step 7** in `suite.log`: Suite tests, Scenario schema tests, and Scenario tests with step-level breakdown (scaffold/env/files).
-- **Custom reporter improvements:** quiet by default; enable per-file text with `--verbose`/`-v` or `KNA_VITEST_TEXT=1`. Reporter **always** writes `e2e/_vitest-summary.json`.
-- **Single source of truth for severities:** `_scenario-detail.json` now contains per-scenario step results. `global-setup.ts` renders from this artifact.
-- **Type coherency:** shared `ScenarioSeverity` used across modules.
+- Deterministic, progressive streaming for Suite and Schema, matching Scenarios with per-step lines and accurate counts (including `skip`).
+- JSON artifacts for non-scenarios: `e2e/_suite-detail.json` (Suite) and `e2e/_schema-detail.json` (Schema). Reporter streams from these.
+- Shared utilities: `suite/components/detail-io.ts`, `suite/components/ci.ts` (icons/boxing), `suite/components/constants.ts` (standard bullets).
 
 ### Changed
 
-- `recordScenarioSeverityFromEnv(...)` now writes only to `_scenario-detail.json`; callers pass `{ step, meta }` where applicable.
-- Suite-level roll-up uses worst-of across steps and scenarios; WARN is no longer treated as OK in summaries.
-- Log links in Step 7 use relative paths (`./e2e/<scenario>.log`) for portability; CI may also print an absolute `file://` URL.
+- Reporter activation order is stable: Suite → Schema → Scenarios. Group output is bullet → steps → summary → log link → footer without pauses.
+- Scenario severities remain in `e2e/_scenario-detail.json` (single source of truth). Non-scenarios compute counts from their JSON streams.
+- Documentation updates across `README.md`, `docs/components.md`, `docs/design.md`, and `docs/scenarios.md` to reflect streaming design.
+- Restructured e2e layout:
+  - Suite sentinel moved to `test/e2e/suite/suite.test.ts` (was `test/e2e/suite.test.ts`).
+  - Schema assets moved to `test/e2e/schema/`:
+    - Schema: `test/e2e/schema/config/prompt-map.schema.json`
+    - Fixture: `test/e2e/schema/fixtures/prompt-map.json`
+    - Test: `test/e2e/schema/prompt-map.schema.test.ts`
+  - Scenario runner fallback now points to `test/e2e/schema/fixtures/prompt-map.json`.
+  - Reporter schema detection updated to match the new path.
+  - `package.json` scripts updated (`test:e2e`, `ci:validate:prompt-map(s)`) to use new locations.
 
 ### Removed
 
-- `_scenario-status.json` (redundant). Worst-of is computed from `_scenario-detail.json`.
+- Legacy `suite/vitest-reporter.ts` and `suite/components/ci-emitter.ts` replaced by the JSON-backed reporter and shared CI helpers.
 
 ### Fixed
 
-- Windows `file://` URL issues in scenario log pointers.
+- De-duplicated and immediately emitted log links for non-scenarios; no raw console bleed-through; corrected skipped counts in footers.
 
 ## [0.4.0] – 2025-10-07
 

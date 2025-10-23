@@ -33,18 +33,18 @@ export default defineConfig({
       interopDefault: true,
     },
 
-  // Allow reporter to intercept console output from tests for boxing/order
-  // disableConsoleIntercept: true,
+    // Allow reporter to intercept console output from tests for boxing/order
+    // disableConsoleIntercept: true,
 
     // Use our test reporter only
-    reporters: ['./suite/vitest-reporter-test.ts'],
+    reporters: ['./suite/vitest-reporter.ts'],
 
     // Output configuration - let our reporter handle all output
     silent: true,
     logHeapUsage: false,
 
     // Extended timeouts to accommodate real-world npm install times
-    testTimeout: 600_000,  // 10 minutes
-    hookTimeout: 600_000   // 10 minutes
+    testTimeout: 600_000, // 10 minutes
+    hookTimeout: 600_000, // 10 minutes
   },
 });

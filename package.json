@@ -1,6 +1,6 @@
 {
   "name": "kickstart-node-app-testbed",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "",
   "main": "index.js",
   "scripts": {
@@ -10,11 +10,11 @@
     "format:check": "prettier . -c",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
-    "test:e2e": "vitest run test/e2e/suite.test.ts --test-timeout=240000",
-    "test:e2e:watch": "vitest --watch test/e2e/suite.test.ts",
+    "test:e2e": "vitest run test/e2e/suite/suite.test.ts --test-timeout=240000",
+    "test:e2e:watch": "vitest --watch test/e2e/suite/suite.test.ts",
     "prepare": "husky",
-    "ci:validate:prompt-map": "ajv validate --spec=draft2020 -s test/e2e/scenarios/_runner/prompt-map.schema.json -d test/e2e/scenarios/_runner/prompt-map.json --strict=false",
-    "ci:validate:prompt-maps": "ajv validate --spec=draft2020 -s test/e2e/scenarios/_runner/prompt-map.schema.json -d \"test/e2e/**/prompt-map.json\" --strict=false"
+    "ci:validate:prompt-map": "ajv validate --spec=draft2020 -s test/e2e/schema/config/prompt-map.schema.json -d test/e2e/schema/fixtures/prompt-map.json --strict=false",
+    "ci:validate:prompt-maps": "ajv validate --spec=draft2020 -s test/e2e/schema/config/prompt-map.schema.json -d \"test/e2e/**/prompt-map.json\" --strict=false"
   },
   "keywords": [],
   "author": "",

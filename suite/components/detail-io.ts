@@ -27,7 +27,7 @@ export function saveJson(p: string, data: any) {
 export function suiteDetailPath(): string | null {
   const stamp = stampFromEnv();
   if (!stamp) return null;
-  return path.join(buildLogRoot(stamp), 'suite-detail.json');
+  return path.join(buildLogRoot(stamp), 'e2e', '_suite-detail.json');
 }
 
 export function schemaDetailPath(): string | null {

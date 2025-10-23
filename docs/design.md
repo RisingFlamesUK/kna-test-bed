@@ -1,4 +1,4 @@
-# ksn-test-bed — Design
+# kna-test-bed — Design
 
 ## Goals
 
@@ -39,6 +39,13 @@
   - `openBoxedProcess` for streaming/interactive runs (stdin access) with **ANSI stripped** so logs stay readable (e.g., checkbox menus).
   - `logBox` for generic boxed sections (used by annotated `.env` dumps).
 
+- **Reporter & streaming**
+  - The custom reporter streams in a deterministic order: **Suite → Schema → Scenarios**.
+  - Suite/Schema step lines are read from JSON artifacts (`e2e/_suite-detail.json`, `e2e/_schema-detail.json`).
+  - Scenario step severities come from `_scenario-detail.json` (single source of truth).
+  - Each group prints: bullet → step lines → summary → log link → footer, without batching or pauses.
+  - Skip is included in counts. Taskless console noise is ignored to prevent bleed-through.
+
 ---
 
 ## High-level flow
@@ -53,9 +60,10 @@
 2. **Each test**
    - **Scaffold** temp app with the CLI (boxed generator output via `execBoxed`).
    - **Assert .env** matches the scenario manifest (required keys **active**, optional keys **commented**).
-   - (Later) **Merge env**: inject values from `./.real-env/real.env` and suite PG env — without clobbering OAuth/explicit `PORT`.
-   - (Later) **Start server** and run assertions (files/env/routes/auth).
-   - **Cleanup** temp app (unless `keepArtifacts`).
+
+- (Later) **Merge env**: inject values from `./.real-env/.real.env` and suite PG env — without clobbering OAuth/explicit `PORT`.
+- (Later) **Start server** and run assertions (files/env/routes/auth).
+- **Cleanup** temp app (unless `keepArtifacts`).
 
 3. **globalTeardown**
    - Stop/remove the PG container (boxed `docker stop`/`rm` if used).
@@ -67,97 +75,117 @@
 
 ```
 kna-test-bed
-├── .tmp                                      # temp directory. Cleaned at the end of a run
+├── .tmp                                      # temp directory (cleaned at the end of a run)
 ├── docs
-│   ├── components.md
-│   ├── design.md
-│   └── scenarios.md
+│   ├── components.md                         # components reference & API
+│   ├── design.md                             # design and architecture (this file)
+│   └── scenarios.md                          # scenario runner and manifests
 ├── logs
-│   └── <date>
+│   └── <timestamp>
 │       ├── e2e                               # e2e logs per test run
+│       │   ├── _scenario-detail.json
+│       │   ├── _schema-detail.json
+│       │   ├── _suite-detail.json
 │       │   ├── bearer+microsoft-silent.log
 │       │   ├── local-only-answers.log
 │       │   ├── local-only-interactive.log
 │       │   ├── local-only-silent.log
 │       │   ├── local+google-silent.log
+│       │   ├── prompt-map.schema.log
 │       │   └── suite-sentinel.log            # log of core suite functionality test
-│       └── suite.log                         # logs for suite. e.g. docker, pg, cleanup
+│       └── suite.log                         # summary log for the suite: docker/pg/cleanup and anchors
 ├── suite
 │   ├── components
-│   │   ├── constants.ts
-│   │   ├── docker-suite.ts
-│   │   ├── logger.ts
-│   │   ├── pg-env.ts
-│   │   ├── pg-suite.ts
-│   │   ├── proc.ts
-│   │   └── scenario-status.ts
+│   │   ├── area-detail.ts                    # append-only JSON steps (Suite/Schema)
+│   │   ├── area-recorder.ts                  # facade for recording steps
+│   │   ├── ci.ts                             # CI console rendering (icons, boxes, footers)
+│   │   ├── constants.ts                      # shared labels and temp paths
+│   │   ├── detail-io.ts                      # JSON artifact path helpers
+│   │   ├── docker-suite.ts                   # Docker bring-up/cleanup helpers
+│   │   ├── format.ts                         # pure formatting utilities
+│   │   ├── logger.ts                         # structured step logging + box helpers
+│   │   ├── pg-env.ts                         # SUITE_PG_* env read/publish helpers
+│   │   ├── pg-suite.ts                       # Postgres container and schema helpers
+│   │   ├── proc.ts                           # boxed subprocess execution/streaming
+│   │   ├── scenario-status.ts                # per-scenario severity store (scaffold/env/files)
+│   │   └── test-area.ts                      # per-area counts/state for reporter
 │   ├── types
 │   │   ├── ambient
-│   │   │   └── picomatch.d.ts
-│   │   ├── fs-assert.ts
-│   │   ├── logger.ts
-│   │   ├── prompts.ts
-│   │   ├── scenario-runner.ts
-│   │   └── scenarios.ts
-│   ├── global-setup.ts                       # suite e.g create/manage containers & postgres
-│   └── vitest-reporter.ts
+│   │   │   ├── picomatch.d.ts                # shim types for picomatch if needed
+│   │   │   └── vitest-reporter-ambient.d.ts  # maps 'vitest/reporter' Reporter type
+│   │   ├── ci.ts                             # UI/icon type definitions
+│   │   ├── fs-assert.ts                      # filesystem assertion types
+│   │   ├── logger.ts                         # Logger type
+│   │   ├── prompts.ts                        # interactive prompt types
+│   │   ├── scenario-runner.ts                # scenario runner types
+│   │   ├── scenarios.ts                      # scenario manifest types
+│   │   ├── severity.ts                       # severity enums/types
+│   │   └── ui.ts                             # UI icon mapping types
+│   ├── global-setup.ts                       # suite bootstrap: Docker+Postgres, publish env
+│   ├── sequencer.ts                          # (optional) custom test file ordering
+│   └── vitest-reporter.ts                    # custom reporter: deterministic JSON-backed streaming
 ├── test
-│   ├── components                            # assert is used wherever testing expectations
-│   │   ├── auth-assert.ts                    # testing auth routes
+│   ├── components                            # assertion helpers used across tests
+│   │   ├── auth-assert.ts                    # testing auth routes (planned)
 │   │   ├── env-assert.ts                     # testing .env
-│   │   ├── env-merge.ts                     # inject env with real settings
+│   │   ├── env-merge.ts                      # inject env with real settings (planned)
 │   │   ├── fs-assert.ts                      # testing files as expected
-│   │   ├── http-assert.ts                    # testing routes (not auth)
-│   │   ├── interactive-driver.ts
-│   │   ├── pg-assert.ts                      # testing pg
-│   │   ├── scaffold-command-assert.ts        # testingCLI command to scaffold
-│   │   └── server-assert.ts                  # testing scaffolded app server
-│   └── e2e
-│       ├── scenarios
-│       │   ├── _runner
-│       │   │   ├── prompt-map.json
-│       │   │   ├── prompt-map.schema.json
-│       │   │   ├── prompt-map.schema.test.ts
-│       │   │   ├── scenario-runner.ts
-│       │   │   └── types.ts
-│       │   ├── bearer+microsoft
-│       │   │   ├── .real-env
-│       │   │   │   └── real.env              # real .env settings to be injected
-│       │   │   ├── config
-│       │   │   │   ├── answers.json
-│       │   │   │   └── tests.json
-│       │   │   ├── manifest
-│       │   │   │   ├── env.json              # expected env
-│       │   │   │   ├── files.json            # expected files
-│       │   │   │   └── routes.json           # expected routes
-│       │   │   └── bearer+microsoft.test.ts  # scenario specific tests
-│       │   ├── local-only
-│       │   │   ├── .real-env
-│       │   │   │   └── .real.env
-│       │   │   ├── confg
-│       │   │   │   ├── answers.json
-│       │   │   │   └── tests.json
-│       │   │   ├── config
-│       │   │   │   └── answers.json          # for answers file scenario
-│       │   │   ├── manifest
-│       │   │   │   ├── env.json
-│       │   │   │   ├── files.json
-│       │   │   │   └── routes.json
-│       │   │   └── local-only.test.ts
-│       │   └── local+google
-│       │       ├── .real-env
-│       │       │   └── real.env
-│       │       ├── config.json
-│       │       │   ├── answers.json
-│       │       │   └── tests.json
-│       │       ├── manifest
-│       │       │   ├── env.json
-│       │       │   ├── files.json
-│       │       │   └── routes.json
-│       │       └── local+google.test.ts
-│       └── suite.test.ts                     # log of core suite functionality test
+│   │   ├── http-assert.ts                    # testing routes (not auth) (planned)
+│   │   ├── interactive-driver.ts             # programmatic TTY driver for interactive flows
+│   │   ├── pg-assert.ts                      # testing pg (planned)
+│   │   ├── scaffold-command-assert.ts        # testing CLI command to scaffold
+│   │   └── server-assert.ts                  # testing scaffolded app server (planned)
+│   ├── e2e
+│   │   ├── scenarios
+│   │   │   ├── _runner
+│   │   │   │   ├── scenario-runner.ts        # JSON-driven scenario executor
+│   │   │   │   └── types.ts
+│   │   │   ├── bearer+microsoft
+│   │   │   │   ├── .real-env
+│   │   │   │   │   └── .real.env             # real .env settings to be injected
+│   │   │   │   ├── config
+│   │   │   │   │   ├── answers.json          # answers for answers-file scenario
+│   │   │   │   │   └── tests.json            # scenario mapping (title → scenarioName)
+│   │   │   │   ├── manifest
+│   │   │   │   │   ├── env.json              # expected env
+│   │   │   │   │   ├── files.json            # expected files
+│   │   │   │   │   └── routes.json           # expected routes
+│   │   │   │   └── bearer+microsoft.test.ts  # scenario specific tests
+│   │   │   ├── local-only
+│   │   │   │   ├── .real-env
+│   │   │   │   │   └── .real.env
+│   │   │   │   ├── config
+│   │   │   │   │   ├── answers.json
+│   │   │   │   │   └── tests.json
+│   │   │   │   ├── manifest
+│   │   │   │   │   ├── env.json
+│   │   │   │   │   ├── files.json
+│   │   │   │   │   └── routes.json
+│   │   │   │   └── local-only.test.ts
+│   │   │   └── local+google
+│   │   │       ├── .real-env
+│   │   │       │   └── .real.env
+│   │   │       ├── config
+│   │   │       │   ├── answers.json
+│   │   │       │   └── tests.json
+│   │   │       ├── manifest
+│   │   │       │   ├── env.json
+│   │   │       │   ├── files.json
+│   │   │       │   └── routes.json
+│   │   │       └── local+google.test.ts
+│   │   ├── schema
+│   │   │   ├── config
+│   │   │   │   └── prompt-map.schema.json    # JSON Schema for prompt-maps
+│   │   │   ├── fixtures
+│   │   │   │   └── prompt-map.json           # sample prompt map (validation input)
+│   │   │   └── prompt-map.schema.test.ts     # validates prompt-map.json against schema
+│   │   └── suite
+│   │       └── suite.test.ts                 # suite sentinel test (Docker/PG/sanity)
+│   └── global.d.ts                           # vitest globals
+├── CHANGELOG.md
 ├── package.json
 ├── README.md
+├── tsconfig.json
 └── vitest.config.ts
 ```
 
@@ -172,12 +200,17 @@ kna-test-bed
 
 ---
 
-## Logging conventions
+## Logging & artifacts
 
+- JSON artifacts written under `logs/<STAMP>/…` are authoritative:
+  - `e2e/_suite-detail.json` — Suite step lines (append-only)
+  - `e2e/_schema-detail.json` — Schema step lines (append-only)
+  - `e2e/_scenario-detail.json` — per-scenario severities (fixed steps: scaffold/env/files)
+  - `e2e/_vitest-summary.json` — per-file counts/durations
 - **Monotonic step numbers**: `N) Title` is left-justified; details are indented.
 - **Indent controls**: every `logger` method accepts `indent?: number | string` (`"+n"`/`"-n"` are relative).
 - **Boxed subprocess output**: use `boxStart/boxLine/boxEnd` (via `proc.execBoxed`) for Docker and CLI runs.
-- **Reporter links**: scenario logs emit `[SCENARIO_LOG] <path>`; the reporter resolves this to a clickable file URL on the **correct test line**.
+- **Reporter links**: scenario logs emit `log: <path>`; the reporter prints a relative path and may also emit a `file://` URL in CI.
 - **Terminology**: we use **“Postgres”** consistently in docs and logs.
 
 ---

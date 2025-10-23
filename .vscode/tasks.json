@@ -2,14 +2,79 @@
 	"version": "2.0.0",
 	"tasks": [
 		{
-			"label": "Run tests with updated reporter",
-			"type": "shell",
-			"command": "npm test",
-			"args": [],
-			"problemMatcher": [
-				"$tsc"
-			],
+			"label": "test",
+			"type": "npm",
+			"script": "test",
+			"group": "test",
+			"problemMatcher": []
+		},
+		{
+			"label": "test:e2e",
+			"type": "npm",
+			"script": "test:e2e",
+			"group": "test",
+			"problemMatcher": []
+		},
+		{
+			"label": "test:e2e:watch",
+			"type": "npm",
+			"script": "test:e2e:watch",
+			"isBackground": true
+		},
+		{
+			"label": "lint",
+			"type": "npm",
+			"script": "lint",
+			"problemMatcher": ["$eslint-stylish"]
+		},
+		{
+			"label": "lint:fix",
+			"type": "npm",
+			"script": "lint:fix",
+			"problemMatcher": ["$eslint-stylish"]
+		},
+		{
+			"label": "typecheck",
+			"type": "npm",
+			"script": "typecheck",
+			"problemMatcher": ["$tsc"]
+		},
+		{
+			"label": "format",
+			"type": "npm",
+			"script": "format"
+		},
+		{
+			"label": "format:check",
+			"type": "npm",
+			"script": "format:check"
+		},
+		{
+			"label": "ci:validate:prompt-map",
+			"type": "npm",
+			"script": "ci:validate:prompt-map"
+		},
+		{
+			"label": "ci:validate:prompt-maps",
+			"type": "npm",
+			"script": "ci:validate:prompt-maps"
+		},
+		{
+			"label": "validate-all",
+			"dependsOn": ["lint", "typecheck", "test"],
+			"dependsOrder": "sequence",
+			"group": "build"
+		},
+		{
+			"label": "validate-all:e2e",
+			"dependsOn": ["lint", "typecheck", "test:e2e", "ci:validate:prompt-maps"],
+			"dependsOrder": "sequence",
 			"group": "build"
 		}
-	]
+	],
+	"presentation": {
+		"reveal": "always",
+		"panel": "shared",
+		"clear": false
+	}
 }

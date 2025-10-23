@@ -1,19 +1,17 @@
-// test/e2e/suite.test.ts
-import path from 'node:path';
+// test/e2e/suite/suite.test.ts
 import { describe, it, expect } from 'vitest';
 
-import { scenarioLoggerFromEnv } from '../../suite/components/logger.ts';
-import { createCI } from '../../suite/components/ci.ts';
-import { recordSuiteStep } from '../../suite/components/area-detail.ts';
-import { withTempSchema } from '../../suite/components/pg-suite.ts';
+import { scenarioLoggerFromEnv } from '../../../suite/components/logger.ts';
+import { createCI } from '../../../suite/components/ci.ts';
+import { recordSuiteStep } from '../../../suite/components/area-detail.ts';
+import { withTempSchema } from '../../../suite/components/pg-suite.ts';
 // Emit steps via CI console for streaming; reporter will capture icon lines
 
 describe('Database Environment Setup', () => {
-  
   it('should connect to Postgres and handle per-test schemas', async () => {
-  const log = scenarioLoggerFromEnv('suite-sentinel');
-  const ci = createCI();
-  const t0 = Date.now();
+    const log = scenarioLoggerFromEnv('suite-sentinel');
+    const ci = createCI();
+    // reporter computes and prints durations; we don't need timing here
 
     // Step 1: quick preflight so we fail clearly when PG isn’t available
     log.step('Opening per-test schema via withTempSchema');
@@ -60,9 +58,8 @@ describe('Database Environment Setup', () => {
           recordSuiteStep('ok', 'Schema round-trip (create/insert/select): OK');
 
           // Explicit log link for reporter to pick up
-          const dt = Date.now() - t0;
           ci.write('log: file://./e2e/suite-sentinel.log');
-          
+
           log.pass('Schema round-trip (create/insert/select) succeeded');
 
           await c.end();

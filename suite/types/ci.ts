@@ -42,10 +42,7 @@ export interface CI {
   /** Box section controls for consistent output formatting */
   boxStart(title: string, opts?: { width?: number; indent?: string | number }): void;
   boxLine(line: string, opts?: { width?: number; indent?: string | number }): void;
-  boxEnd(
-    label: string,
-    opts?: { width?: number; indent?: string | number; suffix?: string },
-  ): void;
+  boxEnd(label: string, opts?: { width?: number; indent?: string | number; suffix?: string }): void;
 
   /** Standard status output methods */
   step(title: string, details?: string, indent?: string | number): void;

@@ -36,7 +36,7 @@ The per-scenario test list. Example:
 ```json
 {
   "describe": "local-only scaffold",
-  "promptMapPath": "test/e2e/scenarios/_runner/prompt-map.json",
+  "promptMapPath": "test/e2e/schema/fixtures/prompt-map.json",
   "manifestPath": "test/e2e/scenarios/local-only/manifest/",
   "realEnvPath": "test/e2e/scenarios/local-only/.real-env/",
   "scenarios": [
@@ -201,8 +201,8 @@ Maps higher-level `include` tokens → concrete interactive prompts.
 
 ### Validate
 
-- Schema: `test/e2e/scenarios/_runner/prompt-map.schema.json`
-- Test: `test/e2e/scenarios/_runner/prompt-map.schema.test.ts`
+- Schema: `test/e2e/schema/config/prompt-map.schema.json`
+- Test: `test/e2e/schema/prompt-map.schema.test.ts`
 - Run: `npx vitest` (schema validation runs as part of the test suite)
 
 ---
@@ -319,10 +319,12 @@ Same resolution order as other manifests:
 
 During a run the suite emits both human-readable logs and JSON artifacts:
 
-- `logs/<STAMP>/suite.log` — top-level suite log (Docker/PG) plus consolidated **Step 7** with Suite/Schema/Scenario summaries.
-- `logs/<STAMP>/e2e/_scenario-detail.json` — step-level severities per scenario (single source of truth).
-- `logs/<STAMP>/e2e/_vitest-summary.json` — Vitest per-file counts/durations (written by the custom reporter).
-- Per-scenario logs: `logs/<STAMP>/e2e/<scenario>.log`. Step 7 links these as `./e2e/<scenario>.log` (relative). CI may also print an absolute `file://` URL.
+- `logs/<STAMP>/suite.log` — top-level suite log (Docker/PG) with group bullets and summaries in stable order: Suite → Schema → Scenarios.
+- `logs/<STAMP>/e2e/_suite-detail.json` — append-only step lines for the Suite area (authoritative source for the reporter).
+- `logs/<STAMP>/e2e/_schema-detail.json` — append-only step lines for Schema/meta tests.
+- `logs/<STAMP>/e2e/_scenario-detail.json` — step-level severities per scenario (fixed three steps: `scaffold`, `env`, `files`).
+- `logs/<STAMP>/e2e/_vitest-summary.json` — Vitest per-file counts/durations (always written by the reporter).
+- Per-scenario logs: `logs/<STAMP>/e2e/<scenario>.log`. Group summaries link these as `./e2e/<scenario>.log` (relative). CI may also print an absolute `file://` URL.
 
 ---
 

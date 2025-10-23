@@ -4,7 +4,10 @@ import { readFile } from 'node:fs/promises';
 import * as path from 'node:path';
 import { describe, it, expect } from 'vitest';
 
-import { scenarioLoggerFromEnv, buildScenarioLogPath } from '../../../../suite/components/logger.ts';
+import {
+  scenarioLoggerFromEnv,
+  buildScenarioLogPath,
+} from '../../../../suite/components/logger.ts';
 import { createCI } from '../../../../suite/components/ci.ts';
 import { assertScaffoldCommand } from '../../../components/scaffold-command-assert.ts';
 import { assertEnvMatches } from '../../../components/env-assert.ts';
@@ -69,7 +72,6 @@ function defineScenario(entry: ScenarioEntry, ctx: ResolveCtx) {
       // Tell reporter to show config file in header and emit group bullet
       console.log(`/* CI: AreaFile ${ctx.configFileAbs} */`);
       ci.boxLine(`• Testing ${entry.scenarioName}...`);
-      const t0 = Date.now();
 
       let appDir = '';
       let cleanup: (() => Promise<void>) | undefined;
@@ -205,7 +207,7 @@ async function loadPromptMap(
     promptMapPath &&
       (path.isAbsolute(promptMapPath) ? promptMapPath : path.resolve(configDir, promptMapPath)),
     path.resolve(configDir, 'prompt-map.json'),
-    path.resolve(process.cwd(), 'test/e2e/scenarios/_runner/prompt-map.json'),
+    path.resolve(process.cwd(), 'test/e2e/schema/fixtures/prompt-map.json'),
   ].filter(Boolean) as string[];
 
   for (const p of candidates) {

@@ -24,9 +24,12 @@ npm run test:e2e:watch
 
 Logs go to `logs/<STAMP>/…`:
 
-- `suite.log`: suite setup/teardown (Docker, PG, env) **and consolidated Step 7 (Suite/Schema/Scenario)**
+- `suite.log`: suite setup/teardown (Docker, PG, env) with progressive, ordered groups: **Suite → Schema → Scenarios**
 - per-scenario logs (e.g., `./e2e/local-only-silent.log`, `./e2e/local-only-answers.log`, `./e2e/local-only-interactive.log`)
-- artifacts: `./e2e/_vitest-summary.json` (per-file counts) and `./e2e/_scenario-detail.json` (scenario step severities)
+- artifacts:
+  - `./e2e/_suite-detail.json` (Suite steps) and `./e2e/_schema-detail.json` (Schema steps)
+  - `./e2e/_scenario-detail.json` (scenario step severities)
+  - `./e2e/_vitest-summary.json` (per-file counts)
 - meta checks (e.g., `prompt-map.schema.log`, `suite-sentinel.log`)
 
 ### Verbose output (optional)
@@ -99,6 +102,12 @@ npm run ci:validate:prompt-maps
 We use `--spec=draft2020` for AJV.
 
 ---
+
+## New in v0.4.1
+
+- Deterministic, JSON-backed streaming in the custom reporter: Suite/Schema now print step lines like Scenarios with accurate counts (incl. skip) and immediate log links/footers.
+- Shared utilities: centralized severity icons, JSON detail IO, and reporter constants to keep output consistent across areas.
+- Stable order: Suite → Schema → Scenarios, with de-duplicated log pointers and no raw console bleed-through.
 
 ## New in v0.4.0
 

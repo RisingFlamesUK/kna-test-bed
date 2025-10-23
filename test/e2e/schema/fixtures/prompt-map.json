@@ -1,5 +1,5 @@
 {
-  "$schema": "./prompt-map.schema.json",
+  "$schema": "../config/prompt-map.schema.json",
   "text": [
     {
       "key": "postgres",

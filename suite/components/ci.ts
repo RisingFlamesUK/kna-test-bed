@@ -49,7 +49,11 @@ export function createCI(): CI {
   /** Are we tracking scenarios? */
   let scenarioClosed = false;
 
-  function getOrCreateTestArea(filePath: string, title: string, areaIndent?: string | number): TestArea {
+  function getOrCreateTestArea(
+    filePath: string,
+    title: string,
+    areaIndent?: string | number,
+  ): TestArea {
     let area = testAreas.get(filePath);
     if (!area) {
       area = new TestArea(title, filePath, areaIndent);
@@ -71,7 +75,12 @@ export function createCI(): CI {
       console.log(`${ind}${ICON[status]} ${line}`);
     },
 
-    testAreaEnd(result: string, logPath: string, counts: { passed: number; failed: number; skipped: number; total: number }, areaIndent?: string | number) {
+    testAreaEnd(
+      result: string,
+      logPath: string,
+      counts: { passed: number; failed: number; skipped: number; total: number },
+      areaIndent?: string | number,
+    ) {
       const ind = resolveIndent(areaIndent, indent);
       ci.boxLine(`- ${result}`, { indent: ind });
       ci.boxLine(`- log: ${TestArea.relFileUrl(logPath)}`, { indent: ind });
@@ -99,16 +108,11 @@ export function createCI(): CI {
     boxLine(line: string, opts?: { width?: number; indent?: string | number }) {
       const ind = resolveIndent(opts?.indent, indent);
       // Shift leading dash content by two spaces without affecting the box border
-      const shifted = line.startsWith('- ')
-        ? `  ${line}`
-        : line;
+      const shifted = line.startsWith('- ') ? `  ${line}` : line;
       console.log(`${ind}${BOX.VERTICAL} ${shifted}`);
     },
 
-    boxEnd(
-      label: string,
-      opts?: { width?: number; indent?: string | number; suffix?: string },
-    ) {
+    boxEnd(label: string, opts?: { width?: number; indent?: string | number; suffix?: string }) {
       const ind = resolveIndent(opts?.indent, indent);
       const suffix = opts?.suffix ?? '';
       const width = opts?.width ?? DEFAULT_BOX_WIDTH;
@@ -153,16 +157,12 @@ export function createCI(): CI {
     },
 
     suiteEnd(result: string, logPath: string, counts: { failed: number; skipped: number }) {
-      ci.testAreaEnd(
-        result,
-        logPath,
-        {
-          total: 1,
-          passed: counts.failed ? 0 : 1,
-          failed: counts.failed,
-          skipped: counts.skipped,
-        },
-      );
+      ci.testAreaEnd(result, logPath, {
+        total: 1,
+        passed: counts.failed ? 0 : 1,
+        failed: counts.failed,
+        skipped: counts.skipped,
+      });
     },
 
     // Special handlers for schema output
@@ -186,7 +186,7 @@ export function createCI(): CI {
 
     // Scenario output methods
     scenarioOpen(configPaths: string[]) {
-      const area = getOrCreateTestArea('scenarios.ts', 'Scenario tests', '  ');
+      getOrCreateTestArea('scenarios.ts', 'Scenario tests', '  ');
       for (const path of configPaths) {
         ci.testStep(TestArea.absFileUrl(path), 'ok', '  ');
       }
@@ -204,9 +204,10 @@ export function createCI(): CI {
 
     scenarioLine(line: string, duration?: number) {
       if (scenarioClosed) return;
-      const durText = duration != null
-        ? ` (${duration > 1000 ? (duration / 1000).toFixed(1) + 's' : duration + 'ms'})`
-        : '';
+      const durText =
+        duration != null
+          ? ` (${duration > 1000 ? (duration / 1000).toFixed(1) + 's' : duration + 'ms'})`
+          : '';
       ci.testStep(line + durText, 'ok', '  ');
     },
 
