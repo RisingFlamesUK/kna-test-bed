@@ -1,6 +1,6 @@
 {
   "name": "kickstart-node-app-testbed",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "description": "",
   "main": "index.js",
   "scripts": {
@@ -10,8 +10,10 @@
     "format:check": "prettier . -c",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
-    "test:e2e": "vitest run test/e2e/suite/suite.test.ts --test-timeout=240000",
-    "test:e2e:watch": "vitest --watch test/e2e/suite/suite.test.ts",
+    "test:e2e": "vitest run",
+    "test:e2e:watch": "vitest --watch",
+    "test:pre": "node scripts/test-pre.mjs",
+    "test:pre:report": "cross-env ALLOW_TEST_FAILURES=1 node scripts/test-pre.mjs",
     "prepare": "husky",
     "ci:validate:prompt-map": "ajv validate --spec=draft2020 -s test/e2e/schema/config/prompt-map.schema.json -d test/e2e/schema/fixtures/prompt-map.json --strict=false",
     "ci:validate:prompt-maps": "ajv validate --spec=draft2020 -s test/e2e/schema/config/prompt-map.schema.json -d \"test/e2e/**/prompt-map.json\" --strict=false"

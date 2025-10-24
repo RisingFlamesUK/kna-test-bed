@@ -2,6 +2,7 @@
 import { describe, it, expect } from 'vitest';
 
 import { scenarioLoggerFromEnv } from '../../../suite/components/logger.ts';
+import * as path from 'node:path';
 import { createCI } from '../../../suite/components/ci.ts';
 import { recordSuiteStep } from '../../../suite/components/area-detail.ts';
 import { withTempSchema } from '../../../suite/components/pg-suite.ts';
@@ -57,8 +58,12 @@ describe('Database Environment Setup', () => {
           expect(got.rows[0].n).toBe(2);
           recordSuiteStep('ok', 'Schema round-trip (create/insert/select): OK');
 
-          // Explicit log link for reporter to pick up
-          ci.write('log: file://./e2e/suite-sentinel.log');
+          // Explicit log link for reporter to pick up (absolute file URL)
+          const absSentinel = path
+            .resolve('logs', String(process.env.KNA_LOG_STAMP || ''), 'e2e', 'suite-sentinel.log')
+            .replace(/\\/g, '/')
+            .replace(/ /g, '%20');
+          ci.write(`log: file:///${absSentinel}`);
 
           log.pass('Schema round-trip (create/insert/select) succeeded');
 

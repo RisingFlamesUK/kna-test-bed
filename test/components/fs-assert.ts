@@ -38,8 +38,8 @@ export async function assertFiles(opts: AssertFilesOptions): Promise<void> {
   const forbiddenPatterns = manifest.forbidden ?? [];
   const ignorePatterns = manifest.ignore ?? [];
 
-  // Step 5 with details (no separate runner step needed)
-  logger.step('fs-assert: scanning sandbox');
+  // Step header (no separate runner step needed)
+  logger.step('Files: validate files against manifest');
   logger.write(`cwd=${cwd}`);
   logger.write(`manifest=${manifestLabel ?? '(inline manifest)'}`);
 

@@ -169,8 +169,11 @@ export default async function globalSetup(): Promise<void | (() => Promise<void>
               );
             }
 
-            const scenRel = `./e2e/${name}.log`; // relative to the suite log directory (forward slashes)
-            suiteLog.write(`  │     - log: file://${scenRel}`);
+            const absLog = path
+              .resolve(e2eDir, `${name}.log`)
+              .replace(/\\/g, '/')
+              .replace(/ /g, '%20');
+            suiteLog.write(`  │     - log: file:///${absLog}`);
           }
 
           suiteLog.write(

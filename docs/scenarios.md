@@ -21,6 +21,11 @@ This doc explains the JSON configs driving scenario tests: **tests.json**, **pro
   - [Semantics](#semantics)
   - [Outcome](#outcome)
   - [Path resolution](#path-resolution)
+- [env.json (environment manifest)](#envjson-environment-manifest)
+  - [Example (env.json)](#example-envjson)
+  - [Semantics](#semantics-1)
+  - [Outcome](#outcome-1)
+  - [Path resolution](#path-resolution-1)
 - [Artifacts & logs](#artifacts--logs)
 - [Best practices](#best-practices)
   - [Example (best practices)](#example-best-practices)
@@ -306,12 +311,106 @@ Same resolution order as other manifests:
 
 ---
 
+## env.json (environment manifest)
+
+The env manifest drives assertions on the unmerged `.env` file emitted by the scaffolder.
+
+### Example (env.json)
+
+```json
+{
+  "required": ["SESSION_SECRET", "PG_HOST", "PG_USER", "PG_PASS"],
+  "optional": ["PG_PORT", "PG_DB"],
+  "ignoreUnexpected": ["PORT", "NODE_ENV"],
+  "expect": {
+    "NODE_ENV": { "equals": "development" },
+    "PG_HOST": { "pattern": "^(localhost|127\\.0\\.0\\.1)$" }
+  }
+}
+```
+
+### Semantics
+
+Assertions run against the unmerged `.env` (exact scaffolder output) and distinguish between:
+
+- Active assignments: `KEY=VALUE` (uncommented)
+- Commented assignments: `# KEY=VALUE`
+
+Rules:
+
+- `required`: keys must be present and active (uncommented). Commented required keys are treated as problems.
+- `optional`: keys must be present but commented. If an optional key is active, it’s a problem. If it’s missing, it’s also a problem.
+- `ignoreUnexpected`: keys listed here are removed from the “unexpected” calculation only. They do not override `required`/`optional` rules.
+- `expect`: value checks on active keys only. Supports `equals` and `pattern` (regex string). Any failure is a problem.
+
+Summaries and boxes:
+
+- Discovery summary: `Scaffolded .env: <N> keys discovered`
+- Section summaries:
+  - Required: `<S> satisfied, <M> missing, <C> commented`
+  - Optional: `<S> satisfied, <M> missing, <A> active`
+  - Other: `<U> unexpected, <I> ignored`
+- Problem-only boxes (only when counts > 0):
+  - Missing required keys
+  - Commented required keys
+  - Missing optional keys
+  - Active optional keys
+  - Unexpected keys found (lists both active and commented unexpected keys; commented are prefixed with `# `)
+  - Value expectation failures (when any)
+
+Missing inputs:
+
+- If `.env` is missing: prints a clear line (`.env file not found: <path>`) and a boxed “Missing file” section before the final status.
+- If `env.json` is missing: prints `Manifest file not found: <path>` and a boxed “Missing file” section before the final status.
+
+### Outcome
+
+- FAIL: any required missing or commented; any optional missing or active; any expectation failure; missing `.env` or manifest.
+- WARN: only unexpected keys remain after `ignoreUnexpected` filter (no FAIL-level issues).
+- OK: none of the above.
+
+The final line is printed last and standardized:
+
+- `✅ env-assert: OK`
+- `⚠️ env-assert: WARN`
+- `❌ env-assert: FAIL`
+
+The scenario runner records the env severity and continues to the files step even on env FAIL (to surface more signal in one pass).
+
+### Path resolution
+
+Same resolution order as other manifests (see [Path resolution](#path-resolution)):
+
+1. `<callerDir>/manifest`
+2. `<scenarioRootFromConfig>/manifest` (when `tests.json` lives under `<scenario>/config`)
+3. `<configDir>/manifest`
+4. `manifestPath` (if provided at the top level)
+5. `<callerDir>`
+6. `<configDir>`
+7. `CWD`
+
+Set `E2E_DEBUG_RESOLVE=1` to log candidate paths and the chosen one.
+
+---
+
 ## Best practices
 
 - Keep `required` bounded and stable; use globs carefully (prefer concrete paths for high-signal checks).
 - Always ignore volatile trees like `node_modules/**`, `.git/**`.
 - Reserve `forbidden` for **must-not-ship** artefacts; keep it small and explicit.
 - Prefer `prompt-map.json` + `interactive.include` over embedding concrete prompts in `tests.json`.
+
+Pre-release test capability:
+
+- Keep exploratory or version-specific test assets out of the main run. Place them under a clearly versioned folder per scenario, e.g.:
+  - `test/e2e/scenarios/<scenario>/pre-release-tests/<version>/{config,manifests}/…`
+  - or any other private convention you prefer — typically ignored in VCS.
+- Runner/reporter behavior:
+  - You can point directly at any config using `SCENARIO_CONFIG` (absolute or relative to repo root).
+  - Or set `PRE_RELEASE_VERSION` and tests will auto-pick `test/e2e/scenarios/<scenario>/pre-release-tests/<version>/config/tests.json` when present; otherwise they fall back to the baseline `config/tests.json`.
+  - Recommended: set an env var — `PRE_RELEASE_VERSION=0.4.x npm test`.
+  - Convenience (no flags): `npm run test:pre -- 0.4.x` (positional arg parsed by a small helper that sets `PRE_RELEASE_VERSION` internally). You can pass Vitest filters after the version, e.g.: `npm run test:pre -- 0.4.x -t "local-only-silent"`.
+  - For log collection without failing the command, use: `npm run test:pre:report -- 0.4.x` (exits 0 regardless of test failures).
 
 ---
 
@@ -324,7 +423,13 @@ During a run the suite emits both human-readable logs and JSON artifacts:
 - `logs/<STAMP>/e2e/_schema-detail.json` — append-only step lines for Schema/meta tests.
 - `logs/<STAMP>/e2e/_scenario-detail.json` — step-level severities per scenario (fixed three steps: `scaffold`, `env`, `files`).
 - `logs/<STAMP>/e2e/_vitest-summary.json` — Vitest per-file counts/durations (always written by the reporter).
-- Per-scenario logs: `logs/<STAMP>/e2e/<scenario>.log`. Group summaries link these as `./e2e/<scenario>.log` (relative). CI may also print an absolute `file://` URL.
+- Per-scenario logs: `logs/<STAMP>/e2e/<scenario>.log`. CI prints absolute `file:///` URLs for quick navigation.
+
+Reporter extras in CI:
+
+- Scenario area header prints two absolute links: the scenario test file and the active `tests.json` (pre-release variant preferred when set).
+- Each test prints a `• Testing <scenario>...` bullet, step lines for `scaffold`, `env manifest checks`, `files manifest checks`, and an immediate log link.
+- The consolidated suite summary also includes per-step reasons for WARN/FAIL (e.g., “required keys commented”, “optional keys active”, “env/files manifest not found”).
 
 ---
 

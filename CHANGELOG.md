@@ -2,6 +2,30 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.4.2] – 2025-10-24
+
+### Added
+
+- Env manifest supports `ignoreUnexpected` (suppresses only unexpected WARNs; does not alter required/optional rules).
+- CI reporter improvement: Scenario area header includes a file:// link to the active `tests.json` (prefers pre-release config when set).
+- Consolidated suite summary now includes clear reasons for WARN/FAIL (e.g., “required keys commented”, “optional keys active”) alongside counts.
+- Pre-release test capability: when `PRE_RELEASE_VERSION` is set, the runner/reporter prefer a versioned config path by convention (no need to commit those assets; typically ignored in VCS).
+- Convenience pre-release runner: `scripts/test-pre.mjs` with `npm run test:pre -- <version>` (forwards Vitest args) and `npm run test:pre:report` (always exit 0 for log collection).
+
+### Changed
+
+- Env assertion output aligned with the existing files assertion contract: compact section summaries, problem-only boxes, clear missing-file handling, and a single final status line printed last.
+- Files assertion step header reads “Files: validate files against manifest.”
+- Files assertion missing-manifest handling: prints a clear “Manifest file not found:” line and a boxed “Missing file” section before the final status (printed last).
+- Env FAIL no longer stops the scenario early: the runner continues to the files step, then fails the scenario at the end (maximizes surfaced signal per run).
+
+### Fixed
+
+- CI output prints valid absolute file URLs; previously some links were relative or incorrect.
+- Scenario step icons accurately reflect actual severities under pre-release config mapping.
+- De-duplication of log pointers to avoid repeated “log:” lines; late logs are still surfaced before area footers.
+- Removed duplicate Schema header output in the reporter.
+
 ## [0.4.1] – 2025-10-23
 
 ### Added

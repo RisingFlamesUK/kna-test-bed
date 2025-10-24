@@ -14,6 +14,7 @@ import { assertEnvMatches } from '../../../components/env-assert.ts';
 import type { ScenarioConfigFile, ScenarioEntry, PromptMap } from './types.ts';
 import type { Prompt } from '../../../components/interactive-driver.ts';
 import { assertFiles } from '../../../components/fs-assert.ts';
+import { recordScenarioSeverityFromEnv } from '../../../../suite/components/scenario-status.ts';
 
 type ResolveCtx = {
   configDir: string;
@@ -103,8 +104,12 @@ function defineScenario(entry: ScenarioEntry, ctx: ResolveCtx) {
             interactive: interactiveOpts,
           });
           ci.testStep('scaffold: OK', 'ok');
+          // Record scaffold OK in scenario detail for reporter
+          recordScenarioSeverityFromEnv(entry.scenarioName, 'ok', { step: 'scaffold' });
         } catch (e) {
           ci.testStep('scaffold: Failed', 'fail');
+          // Record scaffold FAIL in scenario detail for reporter
+          recordScenarioSeverityFromEnv(entry.scenarioName, 'fail', { step: 'scaffold' });
           throw e;
         }
 
@@ -118,6 +123,7 @@ function defineScenario(entry: ScenarioEntry, ctx: ResolveCtx) {
         expect(Boolean(appDir)).toBe(true);
 
         // 2a) Env assertions (ALWAYS run on the UNMERGED .env to verify scaffolder output)
+        let envSeverity: 'ok' | 'warn' | 'fail' | null = null;
         if (entry.tests.assertEnv?.manifest) {
           const manifestPath = resolveWithBasesVerbose(
             entry.tests.assertEnv.manifest,
@@ -131,11 +137,19 @@ function defineScenario(entry: ScenarioEntry, ctx: ResolveCtx) {
           log.write(`manifest=${manifestPath}`);
 
           try {
-            await assertEnvMatches({ appDir, manifestPath, log, scenarioName: entry.scenarioName });
-            ci.testStep('env manifest checks: OK', 'ok');
-          } catch (e) {
-            ci.testStep('env manifest checks: Failed', 'fail');
-            throw e;
+            const sev = await assertEnvMatches({
+              appDir,
+              manifestPath,
+              log,
+              scenarioName: entry.scenarioName,
+            });
+            envSeverity = sev;
+            ci.testStep(`env manifest checks: ${sev.toUpperCase()}`, sev as any);
+          } catch {
+            // env-assert throws on FAIL — record and continue to files step
+            ci.testStep('env manifest checks: FAIL', 'fail');
+            envSeverity = 'fail';
+            // Do not rethrow; we want to continue with file assertions
           }
         }
 
@@ -146,6 +160,26 @@ function defineScenario(entry: ScenarioEntry, ctx: ResolveCtx) {
             orderManifestBases(ctx),
             { kind: 'manifest', log },
           );
+
+          // Pre-check manifest existence to style missing-file case consistently
+          if (!fs.existsSync(filesManifestPath)) {
+            log.step('Files: validate files against manifest');
+            log.write(`cwd=${appDir}`);
+            log.write(`manifest=${filesManifestPath}`);
+            log.write('Manifest file not found:');
+            log.boxStart('Missing file');
+            log.boxLine(`• ${filesManifestPath}`);
+            log.boxEnd('1 file');
+            if ('fail' in log && typeof log.fail === 'function') log.fail('fs-assert: FAIL');
+            else log.write('fs-assert: FAIL');
+            ci.testStep('files manifest checks: FAIL', 'fail');
+            // Record severity at files step with explanatory note for suite summary
+            recordScenarioSeverityFromEnv(entry.scenarioName, 'fail', {
+              step: 'files',
+              meta: { note: 'files manifest not found' },
+            });
+            throw new Error('files manifest missing');
+          }
 
           try {
             await assertFiles({
@@ -179,6 +213,11 @@ function defineScenario(entry: ScenarioEntry, ctx: ResolveCtx) {
             : path.join('logs', 'latest', 'e2e', `${entry.scenarioName}.log`);
           const absLog = path.resolve(candidate).replace(/\\/g, '/').replace(/ /g, '%20');
           ci.testStep(`log: file:///${absLog}`, 'ok');
+        }
+
+        // After both steps, fail the scenario if any step ended up with FAIL severity
+        if (envSeverity === 'fail') {
+          throw new Error('scenario failed due to env FAIL');
         }
       } finally {
         // Backstop: ensure a log line is present if it wasn't already

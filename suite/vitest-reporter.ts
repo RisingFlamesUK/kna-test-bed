@@ -5,6 +5,7 @@ import { createCI } from './components/ci.ts';
 import * as fs from 'fs';
 import * as path from 'path';
 import { buildScenarioLogPath } from './components/logger.ts';
+import { getPreReleaseVersion } from './components/pre-release.ts';
 
 // Simple test-focused reporter to help debug test output
 export default class TestReporter implements Reporter {
@@ -363,8 +364,14 @@ export default class TestReporter implements Reporter {
         const testAbs: string | undefined = (area as any)?.meta?.testFileAbs ?? area?.filePathAbs;
         if (testAbs) {
           const dir = path.dirname(testAbs);
-          const candidate = path.join(dir, 'config', 'tests.json');
-          if (fs.existsSync(candidate)) cfgPath = candidate;
+          const defaultCandidate = path.join(dir, 'config', 'tests.json');
+          const pre = getPreReleaseVersion() || '';
+          const preCandidate = pre
+            ? path.join(dir, 'pre-release-tests', pre, 'config', 'tests.json')
+            : null;
+          // Prefer pre-release config when present
+          if (preCandidate && fs.existsSync(preCandidate)) cfgPath = preCandidate;
+          else if (fs.existsSync(defaultCandidate)) cfgPath = defaultCandidate;
         }
       }
       if (!cfgPath || !fs.existsSync(cfgPath)) return null;
@@ -430,12 +437,44 @@ export default class TestReporter implements Reporter {
     const absHeaderPath = area.filePathAbs;
     const urlPath = absHeaderPath.replace(/\\/g, '/').replace(/ /g, '%20');
     this.ci.boxLine(`file:///${urlPath}`);
+    // For Scenario areas, print the config tests.json URL right under the header
+    if (this.isScenarioAreaByKey(key)) {
+      const cfg = this.getConfigPathForArea(key);
+      if (cfg && fs.existsSync(cfg)) {
+        const cfgUrl = cfg.replace(/\\/g, '/').replace(/ /g, '%20');
+        this.ci.boxLine(`file:///${cfgUrl}`);
+      }
+    }
     this.headerStarted.add(key);
     // Flush any buffered lines now that header is printed
     const buf0 = this.buffers.get(key);
     if (buf0 && buf0.lines.length) {
       for (const l of buf0.lines) this.ci.boxLine(l);
       buf0.lines.length = 0;
+    }
+  }
+
+  // Resolve config path for a scenario area (prefer pre-release config when set)
+  private getConfigPathForArea(fileKey: string): string | null {
+    try {
+      const area = this.areas.get(fileKey) as any;
+      let cfgPath: string | undefined = area?.meta?.configPath;
+      if (!cfgPath || !fs.existsSync(cfgPath)) {
+        const testAbs: string | undefined = (area as any)?.meta?.testFileAbs ?? area?.filePathAbs;
+        if (testAbs) {
+          const dir = path.dirname(testAbs);
+          const pre = getPreReleaseVersion() || '';
+          const preCandidate = pre
+            ? path.join(dir, 'pre-release-tests', pre, 'config', 'tests.json')
+            : null;
+          const defaultCandidate = path.join(dir, 'config', 'tests.json');
+          if (preCandidate && fs.existsSync(preCandidate)) cfgPath = preCandidate;
+          else if (fs.existsSync(defaultCandidate)) cfgPath = defaultCandidate;
+        }
+      }
+      return cfgPath ? path.resolve(cfgPath) : null;
+    } catch {
+      return null;
     }
   }
 

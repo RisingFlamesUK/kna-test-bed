@@ -44,6 +44,8 @@
   - Suite/Schema step lines are read from JSON artifacts (`e2e/_suite-detail.json`, `e2e/_schema-detail.json`).
   - Scenario step severities come from `_scenario-detail.json` (single source of truth).
   - Each group prints: bullet → step lines → summary → log link → footer, without batching or pauses.
+  - Scenario area header prints both the test file and the active `tests.json` as absolute `file:///` URLs (pre-release variant preferred when `PRE_RELEASE_VERSION` is set and present).
+  - All log pointers are absolute `file:///` URLs.
   - Skip is included in counts. Taskless console noise is ignored to prevent bleed-through.
 
 ---
@@ -64,6 +66,8 @@
 - (Later) **Merge env**: inject values from `./.real-env/.real.env` and suite PG env — without clobbering OAuth/explicit `PORT`.
 - (Later) **Start server** and run assertions (files/env/routes/auth).
 - **Cleanup** temp app (unless `keepArtifacts`).
+  - **Assert .env** matches the scenario manifest (required keys **active**, optional keys **commented**). Output contract aligned with fs-assert: compact summaries, problem-only boxes, and a single final status line printed last.
+  - Even if the **env** step is `FAIL`, the runner records severity and proceeds to the **files** step, then fails the scenario at the end (to maximize surfaced signal per run).
 
 3. **globalTeardown**
    - Stop/remove the PG container (boxed `docker stop`/`rm` if used).
@@ -94,6 +98,8 @@ kna-test-bed
 │       │   ├── prompt-map.schema.log
 │       │   └── suite-sentinel.log            # log of core suite functionality test
 │       └── suite.log                         # summary log for the suite: docker/pg/cleanup and anchors
+├── scripts
+│   └── test-pre.mjs                          # helper: sets PRE_RELEASE_VERSION then runs Vitest
 ├── suite
 │   ├── components
 │   │   ├── area-detail.ts                    # append-only JSON steps (Suite/Schema)
@@ -106,6 +112,7 @@ kna-test-bed
 │   │   ├── logger.ts                         # structured step logging + box helpers
 │   │   ├── pg-env.ts                         # SUITE_PG_* env read/publish helpers
 │   │   ├── pg-suite.ts                       # Postgres container and schema helpers
+│   │   ├── pre-release.ts                    # pre-release version detection (env/npm args)
 │   │   ├── proc.ts                           # boxed subprocess execution/streaming
 │   │   ├── scenario-status.ts                # per-scenario severity store (scaffold/env/files)
 │   │   └── test-area.ts                      # per-area counts/state for reporter
@@ -264,3 +271,14 @@ Interactive scenarios are driven by **`test/components/interactive-driver.ts`**,
 - (Merge step reserved for later.)
 
 > Logging: filesystem results are summarized with compact counters and boxed lists (only when non-zero), e.g. **Missing files**, **Forbidden files found**, **Unexpected files found**.
+> Logging: filesystem results are summarized with compact counters and boxed lists (only when non-zero), e.g. **Missing files**, **Forbidden files found**, **Unexpected files found**. The step header reads: “Files: validate files against manifest.” Missing manifest is handled with a clear “Manifest file not found:” line plus a boxed “Missing file” section, then the final `❌ fs-assert: FAIL`.
+
+---
+
+## Output contract and runner updates
+
+- Standardized output contract across env/files: single final status line printed last; problem-only boxes; compact section summaries.
+- Env-assert supports `ignoreUnexpected` (suppresses only WARNs for unexpected keys). Value expectations (`equals`/`pattern`) apply to active keys and fail the step on mismatch.
+- Runner continues to the files step after env `FAIL` and records step severities (`scaffold`, `env`, `files`) in `e2e/_scenario-detail.json`.
+- Missing `.env` or manifest cases print a clear “not found” line and a boxed “Missing file” before the final `❌` line.
+- CI reporter prints absolute file URLs, includes the active `tests.json` link under scenario headers, and surfaces concise cause notes (e.g., “required keys commented”, “optional keys active”, “env/files manifest not found”) in the consolidated suite summary.

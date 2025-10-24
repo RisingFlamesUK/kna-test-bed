@@ -4,6 +4,7 @@ import { execa } from 'execa';
 import * as path from 'node:path';
 import { describe, it } from 'vitest';
 import { scenarioLoggerFromEnv } from '../../../suite/components/logger.ts';
+import { buildScenarioLogPath } from '../../../suite/components/logger.ts';
 import { createCI } from '../../../suite/components/ci.ts';
 import { recordSchemaStep } from '../../../suite/components/area-detail.ts';
 
@@ -39,8 +40,16 @@ describe('prompt-map schema validation', () => {
       recordSchemaStep('fail', `Schema validation failed: ${err}`);
       throw e;
     } finally {
-      // Explicit log line
-      ci.write('log: file://./e2e/prompt-map.schema.log');
+      // Explicit log line (absolute file URL)
+      const stamp = process.env.KNA_LOG_STAMP || '';
+      const abs = (
+        stamp
+          ? buildScenarioLogPath(stamp, 'prompt-map.schema')
+          : path.resolve('logs', 'latest', 'e2e', 'prompt-map.schema.log')
+      )
+        .replace(/\\/g, '/')
+        .replace(/ /g, '%20');
+      ci.write(`log: file:///${abs}`);
 
       if ((log as any)?.close) await (log as any).close?.();
     }

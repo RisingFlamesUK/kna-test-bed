@@ -20,6 +20,19 @@ npm run test:e2e
 
 # watch the suite during development
 npm run test:e2e:watch
+
+# optional: run with a pre-release config version (auto-picks versioned tests.json when present)
+# recommended (no npm warning, no CLI arg leakage):
+PRE_RELEASE_VERSION=0.4.x npm test
+
+# convenience (pass version as a positional arg):
+npm run test:pre -- 0.4.x
+
+# optionally forward Vitest args (e.g., run a subset):
+npm run test:pre -- 0.4.x -t "silent mode: scaffolds app without errors"
+
+# collect logs but always exit 0 (for inspection workflows):
+npm run test:pre:report -- 0.4.x
 ```
 
 Logs go to `logs/<STAMP>/…`:
@@ -102,6 +115,16 @@ npm run ci:validate:prompt-maps
 We use `--spec=draft2020` for AJV.
 
 ---
+
+## New in v0.4.2
+
+- Env assertions aligned with fs-assert output contract:
+  - Compact summaries + problem-only boxes; a single final status line printed last: `✅ env-assert: OK` | `⚠️ env-assert: WARN` | `❌ env-assert: FAIL`.
+  - `ignoreUnexpected` now supported (suppresses only unexpected WARNs; does not override required/optional rules).
+  - Clear “Missing file” handling for absent `.env` or `env.json` (message + boxed section before final `❌`).
+- Scenario runner continues to the files step after an env `FAIL` and records both severities for the reporter.
+- Files step header renamed to: “Files: validate files against manifest.” Missing manifest prints a boxed “Missing file” and then `❌ fs-assert: FAIL`.
+- Docs updated: components, scenarios (including env.json manifest semantics), and design.
 
 ## New in v0.4.1
 

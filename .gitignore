@@ -21,6 +21,10 @@ directory_tree.json
 # copilot incl. instructions
 .github/
 
+# pre-release scenario assets (versioned test-only configs/manifests)
+# generic patterns for future pre-release assets
+test/e2e/scenarios/**/pre-release-tests/
+
 # under development
 local+google/
 bearer+microsoft/

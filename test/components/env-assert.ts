@@ -2,7 +2,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import type { Logger } from '../../suite/types/logger.ts';
-import { logBox } from '../../suite/components/proc.ts';
+import { logBoxCount } from '../../suite/components/proc.ts';
 import { recordScenarioSeverityFromEnv } from '../../suite/components/scenario-status.ts';
 
 type ManifestSpec = {
@@ -10,6 +10,8 @@ type ManifestSpec = {
   optional?: string[];
   /** Optional expectations for active (uncommented) key values. */
   expect?: Record<string, { equals?: string; pattern?: string }>;
+  /** Optional: keys to ignore if unexpected (do not WARN). */
+  ignoreUnexpected?: string[];
 };
 
 type Seen = {
@@ -106,21 +108,33 @@ export async function assertEnvMatches(opts: {
   log?: Logger;
   /** For scenario-level severity aggregation */
   scenarioName?: string;
-}): Promise<void> {
+}): Promise<'ok' | 'warn' | 'fail'> {
   const { appDir, manifestPath, log } = opts;
 
   const envFile = path.join(appDir, '.env');
   if (!fs.existsSync(envFile)) {
-    log?.fail(`.env not found at: ${envFile}`);
-    recordScenarioSeverityFromEnv(opts.scenarioName ?? 'unknown', 'fail', { step: 'env' });
+    // Message before final status; style with a box for readability
+    log?.write(`.env not found:`);
+    logBoxCount(log, 'Missing file', [`• ${envFile}`], '1 file');
+    recordScenarioSeverityFromEnv(opts.scenarioName ?? 'unknown', 'fail', {
+      step: 'env',
+      meta: { note: '.env file not found' },
+    });
+    log?.fail(`env-assert: FAIL`);
     throw new Error('.env missing');
   }
   const envText = fs.readFileSync(envFile, 'utf8');
   const { active, commented } = parseDotEnv(envText);
 
   if (!fs.existsSync(manifestPath)) {
-    log?.fail(`Manifest file not found at: ${manifestPath}`);
-    recordScenarioSeverityFromEnv(opts.scenarioName ?? 'unknown', 'fail', { step: 'env' });
+    // Message before final status; style with a box for readability
+    log?.write(`Manifest file not found:`);
+    logBoxCount(log, 'Missing file', [`• ${manifestPath}`], '1 file');
+    recordScenarioSeverityFromEnv(opts.scenarioName ?? 'unknown', 'fail', {
+      step: 'env',
+      meta: { note: 'env manifest not found' },
+    });
+    log?.fail(`env-assert: FAIL`);
     throw new Error('manifest missing');
   }
   const manifest = loadManifest(manifestPath);
@@ -128,38 +142,136 @@ export async function assertEnvMatches(opts: {
   const required = new Set(manifest.required ?? []);
   const optional = new Set(manifest.optional ?? []);
 
-  log?.write(
-    `manifest: required=${required.size}, optional=${optional.size}; seen: active=${active.size}, commented=${commented.size}`,
-  );
+  // Discovery summary (mirror fs-assert minimal style)
+  const discoveredKeys = active.size + commented.size;
+  log?.write(`Scaffolded .env: ${discoveredKeys} keys discovered`);
 
-  // 1) Required must be present as active (value may be blank)
-  const missingRequired: string[] = [];
+  // --- Required section ---
+  const requiredCommented: string[] = [];
+  const requiredMissing: string[] = [];
+  let requiredSatisfied = 0;
   for (const key of required) {
-    if (!active.has(key)) missingRequired.push(key);
+    const isAct = active.has(key);
+    const isCom = commented.has(key);
+    if (isAct) requiredSatisfied++;
+    else if (isCom) requiredCommented.push(key);
+    else requiredMissing.push(key);
+  }
+  const requiredCount = required.size;
+  const requiredMissingCount = requiredMissing.length;
+  const requiredCommentedCount = requiredCommented.length;
+  log?.write(
+    `- Required Keys Test (${requiredCount} required): ${requiredSatisfied} satisfied, ${requiredMissingCount} missing, ${requiredCommentedCount} commented`,
+  );
+  if (requiredCommentedCount > 0) {
+    const lines = requiredCommented.map((k) => `• # ${k}`);
+    logBoxCount(
+      log,
+      'Commented required keys',
+      lines,
+      `${requiredCommentedCount} ${requiredCommentedCount === 1 ? 'key' : 'keys'}`,
+    );
+  }
+  if (requiredMissingCount > 0) {
+    const lines = requiredMissing.map((k) => `• ${k}`);
+    logBoxCount(
+      log,
+      'Missing required keys',
+      lines,
+      `${requiredMissingCount} ${requiredMissingCount === 1 ? 'key' : 'keys'}`,
+    );
   }
 
-  // 2) Optional must exist but be commented (not active)
-  const missingOptional: string[] = [];
+  // --- Optional section ---
+  let optionalSatisfied = 0; // commented and not active
+  const optionalMissing: string[] = [];
   const optionalActive: string[] = [];
   for (const key of optional) {
-    const isCommented = commented.has(key);
-    const isActive = active.has(key);
-    if (!isCommented) missingOptional.push(key);
-    if (isActive) optionalActive.push(key);
+    const isAct = active.has(key);
+    const isCom = commented.has(key);
+    if (isAct) {
+      optionalActive.push(key);
+    } else if (isCom) {
+      optionalSatisfied++;
+    } else {
+      optionalMissing.push(key);
+    }
+  }
+  const optionalCount = optional.size;
+  const optionalMissingCount = optionalMissing.length;
+  const optionalActiveCount = optionalActive.length;
+  log?.write(
+    `- Optional Keys Test (${optionalCount} optional): ${optionalSatisfied} satisfied, ${optionalMissingCount} missing, ${optionalActiveCount} active`,
+  );
+  if (optionalMissingCount > 0) {
+    const lines = optionalMissing.map((k) => `• ${k}`);
+    logBoxCount(
+      log,
+      'Missing optional keys',
+      lines,
+      `${optionalMissingCount} ${optionalMissingCount === 1 ? 'key' : 'keys'}`,
+    );
+  }
+  if (optionalActiveCount > 0) {
+    const lines = optionalActive.map((k) => `• ${k}`);
+    logBoxCount(
+      log,
+      'Active optional keys',
+      lines,
+      `${optionalActiveCount} ${optionalActiveCount === 1 ? 'key' : 'keys'}`,
+    );
   }
 
-  // 3) Value expectations (only for active keys)
-  const expectFailures: string[] = [];
-  for (const [key, rule] of Object.entries(manifest.expect ?? {})) {
-    if (!active.has(key)) {
-      expectFailures.push(`Expected active key not found: ${key}`);
+  // --- Other/Unexpected section ---
+  const allListed = new Set<string>([...required, ...optional]);
+  const ignore = new Set(manifest.ignoreUnexpected ?? []);
+  const unexpectedActive: string[] = [];
+  const unexpectedCommented: string[] = [];
+  const ignoredKeys: string[] = [];
+  for (const key of active.keys()) {
+    if (allListed.has(key)) continue;
+    if (ignore.has(key)) {
+      ignoredKeys.push(key);
       continue;
     }
-    const actual = active.get(key) ?? '';
+    unexpectedActive.push(key);
+  }
+  for (const key of commented) {
+    if (allListed.has(key)) continue;
+    if (ignore.has(key)) {
+      if (!ignoredKeys.includes(key)) ignoredKeys.push(key);
+      continue;
+    }
+    unexpectedCommented.push(key);
+  }
+  const unexpectedCount = unexpectedActive.length + unexpectedCommented.length;
+  const ignoredCount = ignoredKeys.length;
+  log?.write(`- Other Keys Found: ${unexpectedCount} unexpected, ${ignoredCount} ignored`);
+  if (unexpectedCount > 0) {
+    const lines = [
+      ...unexpectedActive.map((k) => `• ${k}`),
+      ...unexpectedCommented.map((k) => `• # ${k}`),
+    ];
+    logBoxCount(
+      log,
+      'Unexpected keys found',
+      lines,
+      `${unexpectedCount} ${unexpectedCount === 1 ? 'key' : 'keys'}`,
+    );
+  }
+
+  // --- Value expectations (only for active keys) ---
+  const expectFailures: string[] = [];
+  for (const [key, rule] of Object.entries(manifest.expect ?? {})) {
+    const actual = active.get(key);
+    if (actual == null) {
+      expectFailures.push(`• ${key}: expected active; not found`);
+      continue;
+    }
     if (rule.equals !== undefined) {
       if (actual !== rule.equals) {
         expectFailures.push(
-          `Value mismatch for ${key}: expected equals ${JSON.stringify(rule.equals)}, got ${JSON.stringify(actual)}`,
+          `• ${key}: expected equals ${JSON.stringify(rule.equals)}, got ${JSON.stringify(actual)}`,
         );
       }
     } else if (rule.pattern !== undefined) {
@@ -167,42 +279,70 @@ export async function assertEnvMatches(opts: {
       try {
         re = new RegExp(rule.pattern);
       } catch {
-        expectFailures.push(`Invalid regex for ${key}: ${JSON.stringify(rule.pattern)}`);
+        expectFailures.push(`• ${key}: invalid regex ${JSON.stringify(rule.pattern)}`);
         continue;
       }
       if (!re.test(actual)) {
         expectFailures.push(
-          `Value mismatch for ${key}: expected pattern ${String(re)}, got ${JSON.stringify(actual)}`,
+          `• ${key}: expected pattern ${String(re)}, got ${JSON.stringify(actual)}`,
         );
       }
     }
   }
+  if (expectFailures.length > 0) {
+    logBoxCount(
+      log,
+      'Value expectation failures',
+      expectFailures,
+      `${expectFailures.length} ${expectFailures.length === 1 ? 'failure' : 'failures'}`,
+    );
+  }
 
-  const hasFailures =
-    missingRequired.length > 0 ||
-    missingOptional.length > 0 ||
-    optionalActive.length > 0 ||
-    expectFailures.length > 0;
-
-  if (hasFailures) {
-    if (missingRequired.length) log?.fail('Missing required   : ' + missingRequired.join(', '));
-    if (missingOptional.length) log?.fail('Optional missing   : ' + missingOptional.join(', '));
-    if (optionalActive.length) log?.fail('Optional active     : ' + optionalActive.join(', '));
-    for (const f of expectFailures) log?.fail(f);
-
-    // Annotated dump to see exactly what the parser saw
+  // Optional deep context (behind an env flag)
+  if (process.env.E2E_DEBUG_ENV_ASSERT === '1') {
     const annotated = buildAnnotatedEnvLines(envText);
-    logBox(log, 'Scaffolded .env (annotated)', annotated, [
-      'Legend:',
-      ' [A] active assignment',
-      ' [C] commented assignment',
-      ' [#] comment',
-      ' [·] blank/other',
-    ]);
+    logBoxCount(log, 'env-assert context (debug)', annotated, 'context');
+  }
 
-    recordScenarioSeverityFromEnv(opts.scenarioName ?? 'unknown', 'fail', { step: 'env' });
-    throw new Error('env assertion failed');
+  // Decide final severity: FAIL > WARN > OK
+  const isFail =
+    requiredMissingCount > 0 ||
+    requiredCommentedCount > 0 ||
+    optionalMissingCount > 0 ||
+    optionalActiveCount > 0 ||
+    expectFailures.length > 0;
+  const isWarn = !isFail && unexpectedCount > 0; // unexpected commented/active => WARN only when not failing
+
+  if (isFail) {
+    let note: string | undefined;
+    if (requiredCommentedCount > 0) note = 'required keys commented';
+    else if (optionalActiveCount > 0) note = 'optional keys active';
+    else if (optionalMissingCount > 0) note = 'optional keys missing';
+    else if (expectFailures.length > 0)
+      note = `value expectation failures: ${expectFailures.length}`;
+
+    recordScenarioSeverityFromEnv(opts.scenarioName ?? 'unknown', 'fail', {
+      step: 'env',
+      meta: {
+        missingCount: requiredMissingCount + optionalMissingCount,
+        unexpectedCount,
+        note,
+      },
+    });
+    log?.fail('env-assert: FAIL');
+    throw new Error('env-assert: required/optional checks failed');
+  }
+  if (isWarn) {
+    recordScenarioSeverityFromEnv(opts.scenarioName ?? 'unknown', 'warn', {
+      step: 'env',
+      meta: { unexpectedCount },
+    });
+    if ('warn' in (log as any) && typeof (log as any)?.warn === 'function')
+      log?.warn('env-assert: WARN');
+    else log?.write('env-assert: WARN');
+    return 'warn';
   }
   recordScenarioSeverityFromEnv(opts.scenarioName ?? 'unknown', 'ok', { step: 'env' });
-  log?.pass('Env assert passed');
+  log?.pass('env-assert: OK');
+  return 'ok';
 }

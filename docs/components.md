@@ -3,6 +3,8 @@
 > This document is derived from the **actual code** and intended architecture in this repo.  
 > Each entry lists **Status**, **Purpose**, **At a glance**, **Exports**, **Inputs/Outputs**, **Dependencies**, **Behavior & details**, **Error behavior**, and **Notes** (if useful).
 
+> Status field convention: must be exactly one of — Implemented | Planned | Deprecated.
+
 ---
 
 ## Index
@@ -48,17 +50,20 @@
 **Status:** Implemented
 
 **Purpose**  
-Deterministic, progressive streaming of Suite → Schema → Scenarios using JSON-backed detail files. Quiet by default; can print per-file text. Emits immediate log links and footers without pauses.
+Deterministic, progressive streaming of Suite → Schema → Scenarios using JSON-backed detail files. Prints absolute file URLs, includes the active config for scenario areas, and emits immediate log links and footers without pauses.
 
 **At a glance**
 
-| Behavior         | Notes                                                                                                                                                                                                   |
-| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Quiet by default | No per-file text unless enabled (see Controls).                                                                                                                                                         |
-| Controls         | Enable text with `--verbose`/`-v` or `KNA_VITEST_TEXT=1`.                                                                                                                                               |
-| JSON artifacts   | Always writes `e2e/_vitest-summary.json`. Reads `e2e/_suite-detail.json`, `e2e/_schema-detail.json`, and `e2e/_scenario-detail.json` to stream step lines and compute accurate counts (including skip). |
-| Order            | Activates and streams in a stable order: Suite → Schema → Scenarios.                                                                                                                                    |
-| Robust           | Ignores taskless console noise; never throws; prints default log links if tests forget to emit one.                                                                                                     |
+| Behavior               | Notes                                                                                                                                                                                                                       |
+| ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Quiet by default       | No per-file text unless enabled (see Controls).                                                                                                                                                                             |
+| Controls               | Enable text with `--verbose`/`-v` or `KNA_VITEST_TEXT=1`.                                                                                                                                                                   |
+| JSON artifacts         | Always writes `e2e/_vitest-summary.json`. Reads `e2e/_suite-detail.json`, `e2e/_schema-detail.json`, and `e2e/_scenario-detail.json` to stream step lines and compute accurate counts (including skip).                     |
+| Order                  | Activates and streams in a stable order: Suite → Schema → Scenarios.                                                                                                                                                        |
+| Scenario header extras | Scenario area header prints two absolute file URLs: the test file and the active `tests.json` config (pre-release variant preferred when `PRE_RELEASE_VERSION` is set and exists).                                          |
+| Absolute log links     | All emitted log pointers are absolute `file:///` URLs (Windows-safe; spaces percent-encoded).                                                                                                                               |
+| Per-test step lines    | Each test prints a bullet `• Testing <scenario>...` and step lines derived from `_scenario-detail.json`: `scaffold`, `env manifest checks`, `files manifest checks` (plus a `↩️ mergeEnv: skipped` when present in config). |
+| Robust                 | Ignores taskless console noise; never throws; prints default log links if tests forget to emit one; de-duplicates repeated log lines while still surfacing late arrivals before area footers.                               |
 
 **Exports**
 
@@ -75,7 +80,7 @@ Consumes runner events; writes to `suite.log`; reads/writes JSON detail artifact
 `path`, `url`, `suite/components/logger.ts`, `suite/components/detail-io.ts`, `suite/components/ci.ts`, `suite/components/constants.ts`
 
 **Behavior & details**  
-Prints group bullets, then step lines as they appear in JSON, then a summary + immediate log link + footer. De-duplicates log pointers and closes areas promptly to avoid trailing pauses.
+Prints group bullets, then step lines as they appear in JSON, then a summary + immediate log link + footer. Scenario areas also render the active `tests.json` link under the header. De-duplicates log pointers and closes areas promptly to avoid trailing pauses. Pre-release mapping ensures `it` → `scenarioName` is resolved from the preferred config when `PRE_RELEASE_VERSION` is set.
 
 **Error behavior**  
 Never throws; drops lines on hard failures.
@@ -914,17 +919,20 @@ Exposes `timedOutAt`; callers decide whether to throw. Checkbox can throw if `re
 **Purpose**  
 Validate the **unmerged** `.env` against a manifest:
 
-- `required` keys must be **active** (uncommented).
-- `optional` keys must be present but **commented**.
-- Optional `expect` map allows **value checks** (`equals` / `pattern`) on **active** keys.
+- `required` keys must be **active** (uncommented)
+- `optional` keys must be present but **commented** (not active)
+- Optional `expect` allows **value checks** on active keys (`equals` / `pattern`)
+- Optional `ignoreUnexpected` lists keys to suppress WARN when they are unexpected
 
 **At a glance**
 
-| Feature           | Notes                                                     |
-| ----------------- | --------------------------------------------------------- |
-| Parse & diff      | Distinguishes active vs commented assignments             |
-| Value checks      | `expect: { KEY: { equals?/pattern? } }`                   |
-| Boxed diagnostics | Annotated `.env` dump with legend via `logBox` on failure |
+| Feature            | Notes                                                                                                    |
+| ------------------ | -------------------------------------------------------------------------------------------------------- | --------------------- | --------------------- |
+| Parse & diff       | Distinguishes active vs commented assignments                                                            |
+| Summaries          | Discovery line + section lines (Required/Optional/Other)                                                 |
+| Problem-only boxes | “Missing required keys”, “Commented required keys”, “Missing optional keys”, “Active optional keys”, etc |
+| Final status last  | Single final line: `✅ env-assert: OK`                                                                   | `⚠️ env-assert: WARN` | `❌ env-assert: FAIL` |
+| Debug (optional)   | `E2E_DEBUG_ENV_ASSERT=1` prints an annotated `.env` box                                                  |
 
 **Exports**
 
@@ -933,17 +941,30 @@ export async function assertEnvMatches(opts: {
   appDir: string;
   manifestPath: string;
   log?: import('../../suite/components/logger.ts').Logger;
-}): Promise<void>;
+  scenarioName?: string;
+}): Promise<'ok' | 'warn' | 'fail'>;
 ```
 
 **Inputs/Outputs**  
-Reads `<appDir>/.env` and manifest JSON; logs pass/fail.
+Reads `<appDir>/.env` and manifest JSON; logs section summaries, problem boxes, and a final status line. Returns the severity and throws on FAIL.
 
 **Dependencies**  
-`fs`, `path`, `suite/components/proc.ts (logBox)`, `suite/components/logger.ts`
+`fs`, `path`, `suite/components/proc.ts (logBoxCount)`, `suite/components/logger.ts`, `suite/components/scenario-status.ts`
 
-**Behavior & details**  
-Annotated dump markers:
+**Behavior & details**
+
+- Discovery: `Scaffolded .env: <N> keys discovered`
+- Required: `S satisfied, M missing, C commented`
+  - Boxes when non-zero: “Missing required keys” (• KEY), “Commented required keys” (• # KEY)
+- Optional: `S satisfied, M missing, A active`
+  - Boxes: “Missing optional keys” (• KEY), “Active optional keys” (• KEY)
+- Other: `U unexpected, I ignored`
+  - Box: “Unexpected keys found” with `• KEY` (active) and `• # KEY` (commented)
+- Value expectations: boxed failures listed as `• KEY: message`
+- Final status (last): OK if no problems, WARN if only unexpected>0, FAIL on any required missing/commented, optional missing/active, or expectation failure
+- Missing `.env` / missing manifest: prints a “not found” line + a boxed “Missing file” before the final `❌`.
+
+Annotated dump markers when debug is enabled:
 
 - `[A]` active assignment (values masked or `(blank)`)
 - `[C]` commented assignment
@@ -951,7 +972,7 @@ Annotated dump markers:
 - `[·]` blank/other
 
 **Error behavior**  
-Throws on missing files or mismatches (after detailed logging).
+Throws on FAIL only (after logging the final status). Returns `'ok' | 'warn'` otherwise.
 
 ---
 

@@ -15,7 +15,13 @@ export default defineConfig({
       },
     },
     include: ['test/e2e/**/*.test.ts'],
-    exclude: ['**/node_modules/**', '**/dist/**', '**/.{idea,git,cache,output,temp}/**'],
+    exclude: [
+      '**/node_modules/**',
+      '**/dist/**',
+      '**/.{idea,git,cache,output,temp}/**',
+      // Exclude moved/placeholder schema test to prevent a duplicate Schema CI block
+      'test/e2e/scenarios/_runner/prompt-map.schema.test.ts',
+    ],
 
     // Deterministic file order: Suite -> Schema -> Scenarios -> other
     sequence: {
