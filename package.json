@@ -1,6 +1,6 @@
 {
   "name": "kickstart-node-app-testbed",
-  "version": "0.4.2",
+  "version": "0.4.3",
   "description": "",
   "main": "index.js",
   "scripts": {
@@ -40,6 +40,7 @@
     "eslint-plugin-import": "^2.32.0",
     "eslint-plugin-vitest": "^0.5.4",
     "execa": "^9.6.0",
+    "fast-glob": "^3.3.3",
     "fs-extra": "^11.3.2",
     "husky": "^9.1.7",
     "lint-staged": "^16.2.3",

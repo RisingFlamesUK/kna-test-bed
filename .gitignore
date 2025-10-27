@@ -24,6 +24,7 @@ directory_tree.json
 # pre-release scenario assets (versioned test-only configs/manifests)
 # generic patterns for future pre-release assets
 test/e2e/scenarios/**/pre-release-tests/
+test/e2e/schema/**/pre-release-tests/
 
 # under development
 local+google/

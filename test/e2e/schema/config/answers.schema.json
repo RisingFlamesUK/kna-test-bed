@@ -1,0 +1,26 @@
+{
+  "$id": "answers.schema.json",
+  "title": "Scaffold Answers File",
+  "description": "Schema for answers.json files used for non-interactive scaffolding",
+  "type": "object",
+  "properties": {
+    "passport": {
+      "type": "string",
+      "description": "Passport authentication strategy (can be comma-separated for multiple)"
+    },
+    "port": {
+      "type": "number",
+      "minimum": 1,
+      "maximum": 65535,
+      "description": "Server port number"
+    },
+    "database": {
+      "type": "string",
+      "description": "Database type"
+    },
+    "sessions": {
+      "type": "boolean",
+      "description": "Enable session support"
+    }
+  }
+}

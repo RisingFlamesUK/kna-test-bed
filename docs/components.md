@@ -36,6 +36,10 @@
   - [`test/e2e/scenarios/_runner/types.ts`](#teste2escenarios_runnertypests)
   - [`test/e2e/scenarios/_runner/scenario-runner.ts`](#teste2escenarios_runnerscenario-runnerts)
 
+- Schema Runner
+  - [`test/e2e/schema/_runner/types.ts`](#teste2eschema_runnertypests)
+  - [`test/e2e/schema/_runner/schema-runner.ts`](#teste2eschema_runnerschema-runnerts)
+
 - Planned Components
   - [`test/components/server-assert.ts`](#testcomponentsserver-assertts-planned)
   - [`test/components/http-assert.ts`](#testcomponentshttp-assertts-planned)
@@ -908,7 +912,10 @@ Consumes `Prompt[]`; returns buffers + `exitCode` (+ `timedOutAt` on timeout).
   - Final timeout line
 
 **Error behavior**  
-Exposes `timedOutAt`; callers decide whether to throw. Checkbox can throw if `required`.
+Returns normally with `timedOutAt` set to the prompt index on timeout (does not throw). The caller (`scaffold-command-assert.ts`) checks `timedOutAt` and throws an error with diagnostic information. Checkbox can throw if `required` is true and labels are not found after scan.
+
+**Notes**  
+As of v0.4.3, the scaffold assertion properly detects timeouts via the `timedOutAt` field and reports them as test failures with clear diagnostic output.
 
 ---
 
@@ -1111,6 +1118,95 @@ Reads `tests.json` + prompt-map; registers Vitest tests dynamically.
 
 **Error behavior**  
 Throws on missing inputs or assertion failures; logs steps in scenario log.
+
+---
+
+## test/e2e/schema/\_runner/types.ts
+
+**Status:** Implemented
+
+**Purpose**  
+Types for JSON-driven schema validation.
+
+**At a glance**
+
+| Type               | Purpose                                                     |
+| ------------------ | ----------------------------------------------------------- |
+| `SchemaConfigFile` | Top-level config defining which files to validate           |
+| `SchemaFileEntry`  | A single file or glob pattern with optional schema override |
+
+**Exports**
+
+```ts
+export type SchemaFileEntry = {
+  file: string; // path or glob pattern
+  schema?: string; // optional per-file schema override
+};
+
+export type SchemaConfigFile = {
+  defaultSchema?: string; // fallback schema when entry doesn't specify one
+  files: SchemaFileEntry[];
+};
+```
+
+**Inputs/Outputs**  
+Types only.
+
+**Dependencies**  
+None
+
+**Behavior & details**  
+Supports glob patterns (e.g., `test/e2e/scenarios/*/config/tests.json`) to validate multiple files with a single entry.
+
+**Error behavior**  
+N/A
+
+---
+
+## test/e2e/schema/\_runner/schema-runner.ts
+
+**Status:** Implemented
+
+**Purpose**  
+JSON-driven schema validator: reads `config/tests.json` or pre-release variant, expands glob patterns, validates files individually, and records results.
+
+**At a glance**
+
+| Feature           | Notes                                                                                                                         |
+| ----------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| Config resolution | Prefers `pre-release-tests/<version>/config/tests.json` when `PRE_RELEASE_VERSION` is set (see `docs/pre-release-testing.md`) |
+| Glob support      | Expands patterns like `scenarios/*/manifest/*.json` with fast-glob                                                            |
+| Per-file override | Each entry can specify its own schema; falls back to `defaultSchema`                                                          |
+| Results recording | Records each file validation as a step in `_schema-detail.json`                                                               |
+| Validation engine | Uses `ajv-cli` with draft 2020-12 spec                                                                                        |
+
+**Exports**
+
+```ts
+export async function runSchemaTestsFromFile(
+  configPath: string,
+): Promise<{ passed: number; failed: number }>;
+```
+
+**Inputs/Outputs**  
+Reads schema config JSON; validates files using ajv-cli; writes results to `_schema-detail.json`.
+
+**Dependencies**  
+`fast-glob`, `execa`, `fs`, `path`, `suite/components/area-detail.ts` (recordSchemaStep)
+
+**Behavior & details**
+
+- Expands each glob pattern in config to concrete file paths
+- Validates each file individually and records result with relative path
+- Default config (`test/e2e/schema/config/tests.json`) validates 16 production files
+- Pre-release configs test both valid and invalid fixtures for comprehensive validation
+- Supports 6 schema types: prompt-map, scenario-tests, env-manifest, files-manifest, routes-manifest, answers
+
+**Error behavior**  
+Throws if config is missing or malformed. Individual file validation failures are recorded but don't stop processing.
+
+**Notes**  
+As of v0.4.3, schema tests use a config-driven approach similar to scenario tests, with support for pre-release test isolation (see [`docs/pre-release-testing.md`](./pre-release-testing.md)).
 
 ---
 

@@ -1,6 +1,6 @@
 {
   "describe": "local-only scaffold",
-  "promptMapPath": "test/e2e/schema/fixtures/prompt-map.json",
+  "promptMapPath": "test/e2e/schema/fixtures/prompt-map-valid.json",
   "manifestPath": "test/e2e/scenarios/local-only/manifest/",
   "realEnvPath": "test/e2e/scenarios/local-only/.real-env/",
   "scenarios": [

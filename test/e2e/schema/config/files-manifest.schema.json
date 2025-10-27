@@ -1,0 +1,30 @@
+{
+  "$id": "files-manifest.schema.json",
+  "title": "Files Manifest",
+  "description": "Schema for files.json manifest files that define expected file structure",
+  "type": "object",
+  "required": ["required"],
+  "properties": {
+    "required": {
+      "type": "array",
+      "description": "Array of file paths that must exist",
+      "items": {
+        "type": "string"
+      }
+    },
+    "forbidden": {
+      "type": "array",
+      "description": "Array of file paths that must NOT exist",
+      "items": {
+        "type": "string"
+      }
+    },
+    "ignore": {
+      "type": "array",
+      "description": "Array of glob patterns to ignore during validation",
+      "items": {
+        "type": "string"
+      }
+    }
+  }
+}

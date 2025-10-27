@@ -41,7 +41,7 @@ The per-scenario test list. Example:
 ```json
 {
   "describe": "local-only scaffold",
-  "promptMapPath": "test/e2e/schema/fixtures/prompt-map.json",
+  "promptMapPath": "test/e2e/schema/fixtures/prompt-map-valid.json",
   "manifestPath": "test/e2e/scenarios/local-only/manifest/",
   "realEnvPath": "test/e2e/scenarios/local-only/.real-env/",
   "scenarios": [
@@ -400,17 +400,11 @@ Set `E2E_DEBUG_RESOLVE=1` to log candidate paths and the chosen one.
 - Reserve `forbidden` for **must-not-ship** artefacts; keep it small and explicit.
 - Prefer `prompt-map.json` + `interactive.include` over embedding concrete prompts in `tests.json`.
 
-Pre-release test capability:
+**Pre-release testing**: See [`docs/pre-release-testing.md`](./pre-release-testing.md) for detailed guide on using version-specific test assets. Quick summary:
 
-- Keep exploratory or version-specific test assets out of the main run. Place them under a clearly versioned folder per scenario, e.g.:
-  - `test/e2e/scenarios/<scenario>/pre-release-tests/<version>/{config,manifests}/…`
-  - or any other private convention you prefer — typically ignored in VCS.
-- Runner/reporter behavior:
-  - You can point directly at any config using `SCENARIO_CONFIG` (absolute or relative to repo root).
-  - Or set `PRE_RELEASE_VERSION` and tests will auto-pick `test/e2e/scenarios/<scenario>/pre-release-tests/<version>/config/tests.json` when present; otherwise they fall back to the baseline `config/tests.json`.
-  - Recommended: set an env var — `PRE_RELEASE_VERSION=0.4.x npm test`.
-  - Convenience (no flags): `npm run test:pre -- 0.4.x` (positional arg parsed by a small helper that sets `PRE_RELEASE_VERSION` internally). You can pass Vitest filters after the version, e.g.: `npm run test:pre -- 0.4.x -t "local-only-silent"`.
-  - For log collection without failing the command, use: `npm run test:pre:report -- 0.4.x` (exits 0 regardless of test failures).
+- Place version-specific test assets under `pre-release-tests/<version>/` (gitignored)
+- Set `PRE_RELEASE_VERSION=<version>` or use `npm run test:pre -- <version>`
+- Runner auto-picks versioned config when present, falls back to production config otherwise
 
 ---
 

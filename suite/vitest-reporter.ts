@@ -111,7 +111,7 @@ export default class TestReporter implements Reporter {
   private isSchemaRunnerAreaByKey(fileKey: string): boolean {
     const area = this.areas.get(fileKey);
     const abs = ((area as any)?.meta?.testFileAbs ?? area?.filePathAbs ?? '').replace(/\\/g, '/');
-    return /test\/e2e\/schema\/prompt-map\.schema\.test\.ts$/i.test(abs);
+    return /test\/e2e\/schema\/schema-validation\.test\.ts$/i.test(abs);
   }
 
   // Group bullets for non-scenario areas (Suite/Schema) are injected by the reporter
@@ -397,7 +397,7 @@ export default class TestReporter implements Reporter {
 
   private getAreaName(fileName: string): string {
     if (fileName === 'suite.test') return 'Suite tests';
-    if (fileName === 'prompt-map.schema.test') return 'Schema tests';
+    if (fileName === 'schema-validation.test') return 'Schema tests';
     if (fileName.includes('local-only')) return 'Scenario tests';
     if (fileName.includes('scenarios')) return 'Scenario tests';
     return fileName;
@@ -793,9 +793,9 @@ export default class TestReporter implements Reporter {
     if (!this.queueFinalized) {
       const toPosix = (p: string) => p.replace(/\\/g, '/');
       const keyToAbs = (k: string) => this.areas.get(k)?.filePathAbs ?? k;
-      const isSuite = (abs: string) => /test\/e2e\/suite\.test\.ts$/i.test(toPosix(abs));
+      const isSuite = (abs: string) => /test\/e2e\/suite\/suite\.test\.ts$/i.test(toPosix(abs));
       const isSchema = (abs: string) =>
-        /test\/e2e\/schema\/prompt-map\.schema\.test\.ts$/i.test(toPosix(abs));
+        /test\/e2e\/schema\/schema-validation\.test\.ts$/i.test(toPosix(abs));
       const isScenario = (abs: string) =>
         /test\/e2e\/scenarios\/.+\/.+\.test\.ts$/i.test(toPosix(abs));
 
@@ -945,7 +945,7 @@ export default class TestReporter implements Reporter {
 
       const statusTag = {
         pass: '[OK]',
-        fail: '[Failed]',
+        fail: '[FAILED]',
         skip: '[Skipped]',
       } as const;
 

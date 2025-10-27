@@ -40,10 +40,10 @@ Logs go to `logs/<STAMP>/…`:
 - `suite.log`: suite setup/teardown (Docker, PG, env) with progressive, ordered groups: **Suite → Schema → Scenarios**
 - per-scenario logs (e.g., `./e2e/local-only-silent.log`, `./e2e/local-only-answers.log`, `./e2e/local-only-interactive.log`)
 - artifacts:
-  - `./e2e/_suite-detail.json` (Suite steps) and `./e2e/_schema-detail.json` (Schema steps)
+  - `./e2e/_suite-detail.json` (Suite steps), `./e2e/_schema-detail.json` (Schema steps)
   - `./e2e/_scenario-detail.json` (scenario step severities)
   - `./e2e/_vitest-summary.json` (per-file counts)
-- meta checks (e.g., `prompt-map.schema.log`, `suite-sentinel.log`)
+- meta checks (e.g., `schema-validation.log`, `suite-sentinel.log`)
 
 ### Verbose output (optional)
 
@@ -115,6 +115,15 @@ npm run ci:validate:prompt-maps
 We use `--spec=draft2020` for AJV.
 
 ---
+
+## New in v0.4.3
+
+- **Suite and Schema test failure reporting**: Tests now properly record and display failure steps with accurate pass/fail counts.
+- **JSON-driven schema test runner**: Config-based schema validation with glob pattern support and per-file schema overrides.
+- **Comprehensive schema library**: Schemas for all test configuration file types (scenario-tests, env-manifest, files-manifest, routes-manifest, answers).
+- **Suite log enhancements**: Schema tests now appear in `suite.log` with individual file validation results and counts, matching the scenario tests section format.
+- **Interactive test timeout handling**: Timeouts are now properly detected and reported as test failures with diagnostic information.
+- Reorganized schema test structure with separate `config/` and `fixtures/` subdirectories for better organization.
 
 ## New in v0.4.2
 

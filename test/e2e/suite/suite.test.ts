@@ -31,6 +31,7 @@ describe('Database Environment Setup', () => {
 
       log.fail(message);
       log.write(`See suite.log for details.`);
+      recordSuiteStep('fail', message);
       await log.close();
       throw new Error(message);
     }
@@ -77,6 +78,7 @@ describe('Database Environment Setup', () => {
       log.boxStart('error');
       log.boxLine(String(err?.stack ?? err));
       log.boxEnd('end error');
+      recordSuiteStep('fail', `Suite test failed: ${err?.message ?? err}`);
       await log.close();
       throw err; // still fail the test (keeps CLI signal)
     } finally {

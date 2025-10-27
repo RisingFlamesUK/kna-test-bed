@@ -1,0 +1,63 @@
+{
+  "$id": "routes-manifest.schema.json",
+  "title": "Routes Manifest",
+  "description": "Schema for routes.json manifest files that define expected HTTP routes",
+  "type": "object",
+  "properties": {
+    "public": {
+      "type": "array",
+      "description": "Public routes that don't require authentication",
+      "items": {
+        "type": "object",
+        "required": ["path", "method", "expect"],
+        "properties": {
+          "path": {
+            "type": "string",
+            "description": "HTTP path"
+          },
+          "method": {
+            "type": "string",
+            "enum": ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"],
+            "description": "HTTP method"
+          },
+          "expect": {
+            "type": "string",
+            "description": "Expected HTTP status code"
+          }
+        }
+      }
+    },
+    "protected": {
+      "type": "array",
+      "description": "Protected routes that require authentication",
+      "items": {
+        "type": "object",
+        "required": ["path", "method", "expect"],
+        "properties": {
+          "path": { "type": "string" },
+          "method": {
+            "type": "string",
+            "enum": ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"]
+          },
+          "expect": { "type": "string" }
+        }
+      }
+    },
+    "oauth": {
+      "type": "array",
+      "description": "OAuth-specific routes",
+      "items": {
+        "type": "object",
+        "required": ["path", "method", "expect"],
+        "properties": {
+          "path": { "type": "string" },
+          "method": {
+            "type": "string",
+            "enum": ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"]
+          },
+          "expect": { "type": "string" }
+        }
+      }
+    }
+  }
+}

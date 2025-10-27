@@ -30,9 +30,15 @@
   - Runs **scaffold** → **assert (unmerged .env)** → (merge step reserved; **skipped** for now)
   - Uses `prompt-map.json` to expand higher-level `include` → concrete interactive prompts
   - Manifests and answers files are resolved with deterministic search order; set `E2E_DEBUG_RESOLVE=1` to log candidates
+- **Schema runner**: JSON-driven schema validation via `test/e2e/schema/_runner/schema-runner.ts`.
+  - Reads `config/tests.json` (default) or `pre-release-tests/<version>/config/tests.json` (when `PRE_RELEASE_VERSION` is set; see `docs/pre-release-testing.md`)
+  - Supports glob patterns to validate multiple files in a single test entry
+  - Per-file schema override capability with optional `defaultSchema` fallback
+  - Validates all test configuration files: prompt-map, scenario-tests, env-manifest, files-manifest, routes-manifest, answers
+  - Records individual file validation results in `_schema-detail.json` for reporter streaming
 - **Test helpers**: `test/components/*`
-  - `scaffold-command-assert.ts`, `interactive-driver.ts`, `env-assert.ts`
-  - future: `server-assert.ts`, `fs-assert.ts`
+  - `scaffold-command-assert.ts`, `interactive-driver.ts`, `env-assert.ts`, `fs-assert.ts`
+  - future: `server-assert.ts`
 - **Per-scenario manifests** (expected files/env/routes) live under each scenario folder.
 - **Subprocess handling:** `suite/components/proc.ts` exposes:
   - `execBoxed` for buffered runs (args nicely wrapped, exit code footer).
@@ -72,6 +78,9 @@
 3. **globalTeardown**
    - Stop/remove the PG container (boxed `docker stop`/`rm` if used).
    - Close the suite logger and print a pointer to `logs/<stamp>`.
+   - Write consolidated test summaries to `suite.log`:
+     - **Schema tests**: Individual file validation results from `_schema-detail.json` with counts
+     - **Scenario tests**: Per-scenario results from `_scenario-detail.json` with step-level detail
 
 ---
 
@@ -95,7 +104,7 @@ kna-test-bed
 │       │   ├── local-only-interactive.log
 │       │   ├── local-only-silent.log
 │       │   ├── local+google-silent.log
-│       │   ├── prompt-map.schema.log
+│       │   ├── schema-validation.log
 │       │   └── suite-sentinel.log            # log of core suite functionality test
 │       └── suite.log                         # summary log for the suite: docker/pg/cleanup and anchors
 ├── scripts
@@ -168,6 +177,15 @@ kna-test-bed
 │   │   │   │   │   ├── env.json
 │   │   │   │   │   ├── files.json
 │   │   │   │   │   └── routes.json
+│   │   │   │   ├── pre-release-tests         # gitignored: version-specific test assets
+│   │   │   │   │   └── x.y.z                 # e.g., 0.4.3, 1.0.0-beta (see docs/pre-release-testing.md)
+│   │   │   │   │       ├── config            # version-specific config/answers
+│   │   │   │   │       │   ├── tests.json
+│   │   │   │   │       │   └── answers.json
+│   │   │   │   │       └── manifest          # version-specific manifests
+│   │   │   │   │           ├── env.json
+│   │   │   │   │           ├── files.json
+│   │   │   │   │           └── routes.json
 │   │   │   │   └── local-only.test.ts
 │   │   │   └── local+google
 │   │   │       ├── .real-env
@@ -181,11 +199,27 @@ kna-test-bed
 │   │   │       │   └── routes.json
 │   │   │       └── local+google.test.ts
 │   │   ├── schema
+│   │   │   ├── _runner
+│   │   │   │   ├── schema-runner.ts          # JSON-driven schema validator
+│   │   │   │   └── types.ts                  # schema test types
 │   │   │   ├── config
-│   │   │   │   └── prompt-map.schema.json    # JSON Schema for prompt-maps
+│   │   │   │   ├── answers.schema.json       # JSON Schema for answers files
+│   │   │   │   ├── env-manifest.schema.json  # JSON Schema for env manifests
+│   │   │   │   ├── files-manifest.schema.json # JSON Schema for files manifests
+│   │   │   │   ├── prompt-map.schema.json    # JSON Schema for prompt-maps
+│   │   │   │   ├── routes-manifest.schema.json # JSON Schema for routes manifests
+│   │   │   │   ├── scenario-tests.schema.json # JSON Schema for tests.json files
+│   │   │   │   └── tests.json                # default schema test config (validates production files)
 │   │   │   ├── fixtures
-│   │   │   │   └── prompt-map.json           # sample prompt map (validation input)
-│   │   │   └── prompt-map.schema.test.ts     # validates prompt-map.json against schema
+│   │   │   │   └── prompt-map-valid.json     # reference prompt-map (also used as scenario runner fallback)
+│   │   │   ├── pre-release-tests             # gitignored: version-specific test assets
+│   │   │   │   └── x.y.z                     # e.g., 0.4.3, 1.0.0-beta (see docs/pre-release-testing.md)
+│   │   │   │       ├── config                # version-specific test config
+│   │   │   │       │   └── tests.json
+│   │   │   │       └── fixtures              # version-specific test fixtures (valid/invalid)
+│   │   │   │           ├── *-valid.json
+│   │   │   │           └── *-invalid-*.json
+│   │   │   └── schema-validation.test.ts     # validates JSON files against schemas
 │   │   └── suite
 │   │       └── suite.test.ts                 # suite sentinel test (Docker/PG/sanity)
 │   └── global.d.ts                           # vitest globals

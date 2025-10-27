@@ -107,7 +107,7 @@ function defineScenario(entry: ScenarioEntry, ctx: ResolveCtx) {
           // Record scaffold OK in scenario detail for reporter
           recordScenarioSeverityFromEnv(entry.scenarioName, 'ok', { step: 'scaffold' });
         } catch (e) {
-          ci.testStep('scaffold: Failed', 'fail');
+          ci.testStep('scaffold: FAILED', 'fail');
           // Record scaffold FAIL in scenario detail for reporter
           recordScenarioSeverityFromEnv(entry.scenarioName, 'fail', { step: 'scaffold' });
           throw e;
@@ -191,7 +191,7 @@ function defineScenario(entry: ScenarioEntry, ctx: ResolveCtx) {
             });
             ci.testStep('files manifest checks: OK', 'ok');
           } catch (e) {
-            ci.testStep('files manifest checks: Failed', 'fail');
+            ci.testStep('files manifest checks: FAILED', 'fail');
             throw e;
           }
         }
@@ -246,7 +246,7 @@ async function loadPromptMap(
     promptMapPath &&
       (path.isAbsolute(promptMapPath) ? promptMapPath : path.resolve(configDir, promptMapPath)),
     path.resolve(configDir, 'prompt-map.json'),
-    path.resolve(process.cwd(), 'test/e2e/schema/fixtures/prompt-map.json'),
+    path.resolve(process.cwd(), 'test/e2e/schema/fixtures/prompt-map-valid.json'),
   ].filter(Boolean) as string[];
 
   for (const p of candidates) {

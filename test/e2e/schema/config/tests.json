@@ -1,0 +1,35 @@
+{
+  "describe": "schema validation for production test configuration files",
+  "files": [
+    {
+      "name": "prompt-map fixture",
+      "pattern": "test/e2e/schema/fixtures/prompt-map-valid.json",
+      "schema": "test/e2e/schema/config/prompt-map.schema.json"
+    },
+    {
+      "name": "scenario test configs",
+      "pattern": "test/e2e/scenarios/*/config/tests.json",
+      "schema": "test/e2e/schema/config/scenario-tests.schema.json"
+    },
+    {
+      "name": "env manifests",
+      "pattern": "test/e2e/scenarios/*/manifest/env.json",
+      "schema": "test/e2e/schema/config/env-manifest.schema.json"
+    },
+    {
+      "name": "files manifests",
+      "pattern": "test/e2e/scenarios/*/manifest/files.json",
+      "schema": "test/e2e/schema/config/files-manifest.schema.json"
+    },
+    {
+      "name": "routes manifests",
+      "pattern": "test/e2e/scenarios/*/manifest/routes.json",
+      "schema": "test/e2e/schema/config/routes-manifest.schema.json"
+    },
+    {
+      "name": "answers files",
+      "pattern": "test/e2e/scenarios/*/config/answers.json",
+      "schema": "test/e2e/schema/config/answers.schema.json"
+    }
+  ]
+}

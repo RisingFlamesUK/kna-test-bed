@@ -71,10 +71,11 @@ export default async function globalSetup(): Promise<void | (() => Promise<void>
         const e2eDir = path.join(root, 'e2e');
         const vitestSummaryPath = path.join(e2eDir, '_vitest-summary.json');
         const scenDetailPath = path.join(e2eDir, '_scenario-detail.json');
+        const schemaDetailPath = path.join(e2eDir, '_schema-detail.json');
 
         const MARK: Record<string, string> = { pass: '✅', fail: '❌', skip: '↩️', unknown: '❓' };
 
-        // Read artifacts (both optional)
+        // Read artifacts (all optional)
         const vitest = (await fs.pathExists(vitestSummaryPath))
           ? ((await fs.readJson(vitestSummaryPath)) as {
               files: {
@@ -89,6 +90,9 @@ export default async function globalSetup(): Promise<void | (() => Promise<void>
         const scenDetail: Record<string, any> = (await fs.pathExists(scenDetailPath))
           ? await fs.readJson(scenDetailPath)
           : {};
+
+        const schemaDetail: Array<{ severity: 'ok' | 'warn' | 'fail' | 'skip'; message: string }> =
+          (await fs.pathExists(schemaDetailPath)) ? await fs.readJson(schemaDetailPath) : [];
 
         // Helpers
         const findFiles = (re: RegExp) => vitest.files.filter((f) => re.test(f.path));
@@ -113,7 +117,40 @@ export default async function globalSetup(): Promise<void | (() => Promise<void>
         // 1) Suite tests
         printFileGroup('Suite tests', findFiles(/test[\\/]+e2e[\\/]+suite\.test\.ts$/i));
 
-        // 2) Scenario schema tests
+        // 2) Schema tests from our artifacts
+        if (schemaDetail.length) {
+          suiteLog.write(
+            `  ┌─ Schema tests ────────────────────────────────────────────────────────────`,
+          );
+
+          let okCount = 0,
+            warnCount = 0,
+            failCount = 0,
+            skipCount = 0;
+
+          for (const item of schemaDetail) {
+            if (item.severity === 'ok') okCount++;
+            else if (item.severity === 'warn') warnCount++;
+            else if (item.severity === 'fail') failCount++;
+            else if (item.severity === 'skip') skipCount++;
+
+            suiteLog.write(`  │ • ${ICON[toSev(item.severity)]} ${item.message}`);
+          }
+
+          const absLog = path
+            .resolve(e2eDir, `schema-validation.log`)
+            .replace(/\\/g, '/')
+            .replace(/ /g, '%20');
+          suiteLog.write(`  │ - log: file:///${absLog}`);
+
+          suiteLog.write(
+            `  └─ (tests: ${schemaDetail.length}, passed: ${okCount}, failed: ${failCount}, warning: ${warnCount}, skipped: ${skipCount})  ────────────────`,
+          );
+        } else {
+          suiteLog.write(`  (no _schema-detail.json found)`);
+        }
+
+        // 3) Scenario schema tests
         printFileGroup(
           'Scenario schema tests',
           findFiles(
@@ -121,7 +158,7 @@ export default async function globalSetup(): Promise<void | (() => Promise<void>
           ),
         );
 
-        // 3) Scenario tests from our artifacts (includes WARN)
+        // 4) Scenario tests from our artifacts (includes WARN)
         if (Object.keys(scenDetail).length) {
           suiteLog.write(
             `  ┌─ Scenario tests ──────────────────────────────────────────────────────────`,

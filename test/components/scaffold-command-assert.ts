@@ -123,7 +123,7 @@ export async function assertScaffoldCommand(opts: ScaffoldCmdOpts): Promise<Scaf
     if (isInteractive) {
       if (opts.interactive?.prompts?.length) {
         // Programmatic interactive run (CI-friendly): use the driver
-        await runInteractive({
+        const result = await runInteractive({
           cmd,
           args,
           cwd: process.cwd(),
@@ -133,6 +133,13 @@ export async function assertScaffoldCommand(opts: ScaffoldCmdOpts): Promise<Scaf
           logTitle: 'generator output',
           windowsHide: true,
         });
+        // Check if we timed out waiting for a prompt
+        if (typeof result.timedOutAt === 'number') {
+          const promptNum = result.timedOutAt + 1;
+          throw new Error(
+            `Interactive driver timed out waiting for prompt #${promptNum} (${String(opts.interactive.prompts[result.timedOutAt]?.expect)})`,
+          );
+        }
       } else {
         // Manual interactive (visible in local terminal)
         log.write('(interactive/manual) streaming to terminal (no prompts provided)');

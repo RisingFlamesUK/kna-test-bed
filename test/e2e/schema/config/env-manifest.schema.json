@@ -1,0 +1,23 @@
+{
+  "$id": "env-manifest.schema.json",
+  "title": "Environment Variables Manifest",
+  "description": "Schema for env.json manifest files that define expected environment variables",
+  "type": "object",
+  "required": ["required"],
+  "properties": {
+    "required": {
+      "type": "array",
+      "description": "Array of environment variable names that must be present",
+      "items": {
+        "type": "string"
+      }
+    },
+    "optional": {
+      "type": "array",
+      "description": "Array of environment variable names that may be present",
+      "items": {
+        "type": "string"
+      }
+    }
+  }
+}

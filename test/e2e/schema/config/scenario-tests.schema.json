@@ -1,0 +1,105 @@
+{
+  "$id": "scenario-tests.schema.json",
+  "title": "Scenario Test Configuration",
+  "description": "Schema for scenario test configuration files (tests.json)",
+  "type": "object",
+  "properties": {
+    "describe": {
+      "type": "string",
+      "description": "Optional description for the test suite"
+    },
+    "promptMapPath": {
+      "type": "string",
+      "description": "Path to the prompt map JSON file"
+    },
+    "manifestPath": {
+      "type": "string",
+      "description": "Base path for manifest files (env.json, files.json, etc.)"
+    },
+    "realEnvPath": {
+      "type": "string",
+      "description": "Path to real environment variable files for testing"
+    },
+    "answersBasePath": {
+      "type": "string",
+      "description": "Base path for answers files"
+    },
+    "scenarios": {
+      "type": "array",
+      "description": "Array of scenario test definitions",
+      "items": {
+        "type": "object",
+        "required": ["scenarioName", "tests"],
+        "properties": {
+          "it": {
+            "type": "string",
+            "description": "Test description (optional, defaults to scenarioName)"
+          },
+          "scenarioName": {
+            "type": "string",
+            "description": "Unique name for this scenario"
+          },
+          "tests": {
+            "type": "object",
+            "properties": {
+              "assertScaffold": {
+                "type": "object",
+                "properties": {
+                  "flags": {
+                    "type": "array",
+                    "items": { "type": "string" }
+                  },
+                  "answersFile": {
+                    "type": "string"
+                  },
+                  "interactive": {
+                    "type": "object",
+                    "properties": {
+                      "include": {
+                        "type": "array",
+                        "items": {
+                          "oneOf": [{ "type": "string" }, { "type": "object" }]
+                        }
+                      },
+                      "prompts": {
+                        "type": "array"
+                      },
+                      "sequence": {
+                        "type": "array"
+                      }
+                    }
+                  }
+                }
+              },
+              "assertEnv": {
+                "type": "object",
+                "required": ["manifest"],
+                "properties": {
+                  "manifest": { "type": "string" }
+                }
+              },
+              "assertFiles": {
+                "type": "object",
+                "required": ["manifest"],
+                "properties": {
+                  "manifest": { "type": "string" }
+                }
+              },
+              "mergeEnv": {
+                "type": "object",
+                "required": ["env"],
+                "properties": {
+                  "env": { "type": "string" }
+                }
+              },
+              "cleanup": {
+                "type": "boolean"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "required": ["scenarios"]
+}
