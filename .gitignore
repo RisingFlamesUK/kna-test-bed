@@ -30,6 +30,7 @@ test/e2e/schema/**/pre-release-tests/
 local+google/
 bearer+microsoft/
 docs/planning
+!docs/planning/roadmap.md
 
 ############################
 # Node setings from GitHub #

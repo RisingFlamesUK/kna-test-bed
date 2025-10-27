@@ -1,5 +1,23 @@
 # kna-test-bed — Design
 
+## Index
+
+- [Goals](#goals)
+- [Non-Goals](#non-goals)
+- [Architecture Overview](#architecture-overview)
+- [High-level flow](#high-level-flow)
+- [Structure](#structure)
+- [Typing & Validation](#typing--validation)
+- [Logging & artifacts](#logging--artifacts)
+- [Docker & Postgres](#docker--postgres)
+- [CI Considerations](#ci-considerations)
+- [Components](#components)
+- [Assertion order](#assertion-order)
+- [Future Components & Roadmap](#future-components--roadmap)
+- [Output contract and runner updates](#output-contract-and-runner-updates)
+
+---
+
 ## Goals
 
 - Automate end-to-end testing of `kickstart-node-app`.
@@ -306,6 +324,131 @@ Interactive scenarios are driven by **`test/components/interactive-driver.ts`**,
 
 > Logging: filesystem results are summarized with compact counters and boxed lists (only when non-zero), e.g. **Missing files**, **Forbidden files found**, **Unexpected files found**.
 > Logging: filesystem results are summarized with compact counters and boxed lists (only when non-zero), e.g. **Missing files**, **Forbidden files found**, **Unexpected files found**. The step header reads: “Files: validate files against manifest.” Missing manifest is handled with a clear “Manifest file not found:” line plus a boxed “Missing file” section, then the final `❌ fs-assert: FAIL`.
+
+---
+
+## Future Components & Roadmap
+
+### Priority Order (v0.4.5–v0.7.0)
+
+**v0.4.5 - Parallelism & Performance** (if CI output integrity maintained)
+
+- Enable schema test parallelism (safe - order within Schema section doesn't matter)
+- Enable scenario parallelism (only if cross-area output bleeding can be prevented)
+- Maintain deterministic area ordering: Suite → Schema → Scenarios
+- Critical: Ensure reporter doesn't interleave output from different test areas
+- Interactive tests remain sequential (TTY conflicts)
+
+**v0.5.0 - Server Infrastructure**
+
+1. `env-merge.ts` - Merge real credentials + suite PG env into scaffolded `.env`
+2. `server-assert.ts` - Start/stop server, readiness checks, graceful shutdown testing
+
+**v0.6.0 - HTTP & Auth** 3. `http-assert.ts` - Public routes + static assets (favicon, CSS, content-type headers) 4. `auth-assert.ts` - Provider-aware auth flows (local/google/microsoft/bearer) 5. `session-assert.ts` - Session persistence across requests (separate module for clarity)
+
+**v0.7.0 - Database** 6. `pg-assert.ts` - Database structure validation via nested JSON manifest
+
+### Key Design Decisions
+
+**Parallelism Strategy**
+
+- **Schema tests**: Enable `test.concurrent` within schema-validation.test.ts
+  - Order doesn't matter within the Schema section
+  - All results still stream to `_schema-detail.json` for reporter
+  - Safe because no shared state between schema validations
+- **Scenario tests**: Enable per-scenario concurrency IF:
+  - Reporter can buffer scenario results and emit them in deterministic order
+  - No cross-contamination between Suite/Schema/Scenario output in CI logs
+  - Each scenario writes to isolated temp directory (already true)
+- **Interactive tests**: Always sequential (TTY/stdin conflicts)
+- **Reporter constraint**: Must maintain Suite → Schema → Scenarios output order even with parallel execution
+
+**Unified routes.json Manifest**
+
+- Single `manifest/routes.json` contains public, protected, auth, and static asset routes
+- Use `requiresAuth: boolean` flag to distinguish protected routes
+- Use `headers` object for content-type and other header assertions
+- Example:
+  ```json
+  {
+    "routes": [
+      { "path": "/", "method": "GET", "status": 200 },
+      {
+        "path": "/favicon.ico",
+        "method": "GET",
+        "status": 200,
+        "headers": { "content-type": "image/x-icon" }
+      },
+      { "path": "/auth/login", "method": "POST", "status": 200 },
+      { "path": "/account", "method": "GET", "status": 200, "requiresAuth": true }
+    ]
+  }
+  ```
+
+**Provider-Aware Auth (auth-assert.ts)**
+
+- Single module handles all auth providers: local, google, microsoft, bearer
+- Provider-specific helpers for different auth flows:
+  - `assertLocalAuth()` - Direct form POST (register/login/logout)
+  - `assertOAuthCallback()` - OAuth redirect flows (Google/Microsoft)
+  - `assertBearerAuth()` - API key/token authentication
+- Shared logic for post-authentication flows (protected routes, account management)
+- Error handling built-in: invalid credentials, missing fields, CSRF failures
+
+**Nested pg-assert.json Manifest**
+
+- Tables contain columns, indexes, foreign keys, and test values as nested objects
+- Supports primary keys, unique constraints, foreign key relationships
+- Optional row count assertions and test data validation
+- Example structure:
+  ```json
+  {
+    "tables": {
+      "users": {
+        "required": true,
+        "columns": {
+          "id": { "type": "integer", "primaryKey": true },
+          "email": { "type": "varchar", "unique": true }
+        },
+        "indexes": {
+          "email_unique": { "columns": ["email"], "unique": true }
+        },
+        "foreignKeys": {},
+        "values": { "minCount": 0 }
+      },
+      "sessions": {
+        "required": true,
+        "foreignKeys": {
+          "fk_user": { "column": "user_id", "references": "users(id)" }
+        }
+      }
+    }
+  }
+  ```
+
+**Separate session-assert.ts Module**
+
+- Smaller, focused modules over monolithic auth testing
+- Tests session persistence independently from auth flows
+- Validates: cookie storage, authenticated requests, session expiry
+- Enables testing session edge cases without coupling to auth providers
+
+**Server Lifecycle Management**
+
+- `startServer()` boots once for all HTTP/auth/session tests
+- Server runs continuously for efficiency during test execution
+- `assertGracefulShutdown()` tests shutdown explicitly (stop/restart cycle)
+- Final `stop()` in cleanup ensures no orphaned processes
+
+**Error Handling Strategy**
+
+- Built into each assert module, not separate components
+- Each module tests both happy paths and error cases
+- Examples:
+  - `http-assert`: 400/401/403/404/500 status codes
+  - `auth-assert`: Invalid credentials, CSRF, rate limiting
+  - `server-assert`: Port conflicts, boot failures, timeout handling
+  - `pg-assert`: Connection failures, missing tables/columns
 
 ---
 

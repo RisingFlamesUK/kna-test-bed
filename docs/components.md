@@ -42,11 +42,12 @@
   - [`test/e2e/schema/_runner/schema-runner.ts`](#teste2eschema_runnerschema-runnerts)
 
 - Planned Components
+  - [`test/components/env-merge.ts`](#testcomponentsenv-mergets-planned)
   - [`test/components/server-assert.ts`](#testcomponentsserver-assertts-planned)
   - [`test/components/http-assert.ts`](#testcomponentshttp-assertts-planned)
-  - [`test/components/env-update.ts`](#testcomponentsenv-updatets-planned)
-  - [`test/components/pg-assert.ts`](#testcomponentspg-assertts-planned)
   - [`test/components/auth-assert.ts`](#testcomponentsauth-assertts-planned)
+  - [`test/components/session-assert.ts`](#testcomponentssession-assertts-planned)
+  - [`test/components/pg-assert.ts`](#testcomponentspg-assertts-planned)
 
 ---
 
@@ -1302,287 +1303,607 @@ As of v0.4.3, schema tests use a config-driven approach similar to scenario test
 
 ---
 
-## test/components/server-assert.ts (Planned)
+## test/components/env-merge.ts (Planned)
 
-**Status:** Planned
+**Status:** Planned (v0.5.0)
 
 **Purpose**  
-Start the scaffolded app and probe core routes (startup health + basic endpoints).
+Merge real-world credentials from `.real-env/real.env` and suite Postgres environment into the scaffolded `.env` file without clobbering user-specified values.
 
 **At a glance**
 
-| Feature    | Notes                                   |
-| ---------- | --------------------------------------- |
-| Start/stop | Spawn `npm run dev` or `node server.js` |
-| Readiness  | Wait for HTTP 200 on `/` (configurable) |
-| Probes     | GET routes with simple content checks   |
-
-**Exports (proposed)**
-
-```ts
-export type ServerAssertOptions = {
-  appDir: string;
-  baseUrl?: string; // if known, else parse from dev log or .env PORT
-  waitFor?: { path: string; status?: number; timeoutMs?: number }; // default { "/", 200, 30000 }
-  env?: Record<string, string | undefined>;
-  log?: import('../../suite/components/logger.ts').Logger;
-};
-
-export async function startServer(
-  opts: ServerAssertOptions,
-): Promise<{ stop: () => Promise<void>; url: string }>;
-
-export async function assertRoutes(
-  baseUrl: string,
-  routes: Array<{
-    path: string;
-    expectStatus: number | number[];
-    contains?: string;
-    headers?: Record<string, string | RegExp>;
-  }>,
-): Promise<void>;
-```
-
-**Inputs/Outputs**  
-Spawns a server process; probes routes; returns a `stop()`.
-
-**Dependencies**  
-`execa`, `http/https`, `suite/components/proc.ts`, `suite/components/logger.ts`
-
-**Behavior & details**  
-Parses port from `.env` or dev server logs; retries during boot.
-
-**Error behavior**  
-Timeouts and non-2xx codes throw with clear diagnostics.
-
----
-
-## test/components/fs-assert.ts
-
-**Status:** Implemented
-
-**Purpose**  
-Assert filesystem layout of the scaffolded app using a per-scenario manifest.
-
-**At a glance**
-
-| Feature    | Notes                                                                                        |
-| ---------- | -------------------------------------------------------------------------------------------- |
-| Required   | `required` patterns — **each pattern must match ≥ 1 file** (case-insensitive)                |
-| Forbidden  | `forbidden` patterns — any match is a **breach**                                             |
-| Ignore     | `ignore` patterns — removed from consideration (but still counted in the total “discovered”) |
-| Unexpected | Files that are neither required nor forbidden (post-ignore)                                  |
-| Severity   | **FAIL** on any `missing` or `breach` • **WARN** on `unexpected>0` • **OK** otherwise        |
-| Boxes      | Uses `proc.logBoxCount()` to print compact lists with bottom labels                          |
-| Debug      | Set `E2E_DEBUG_FS_ASSERT=1` to add a capped “context” box                                    |
-
-**Exports**
-
-```ts
-export async function assertFiles(opts: {
-  cwd: string; // sandbox root
-  manifest: import('../../suite/types/fs-assert.ts').AssertFilesManifestV1;
-  logger: import('../../suite/types/logger.ts').Logger;
-  manifestLabel?: string; // shown in the header for clarity
-  scenarioName?: string; // updates per-scenario status sentinel
-}): Promise<void>;
-```
-
-**Inputs/Outputs**  
-Reads the sandbox under `cwd`. Logs:
-
-- Header: step title + aligned `cwd=` and `manifest=`.
-- Summaries:
-  - `Scaffolded output: <N> files discovered`
-  - `- Required Files Test (<R> required): <S> satisfied, <M> missing`
-  - `- Forbidden Files Test (<F> forbidden): Outcome: <B> breach`
-  - `- Other Files Found: <U> unexpected, <I> ignored`
-- Boxes (only when non-zero): **Missing files** / **Forbidden files found** / **Unexpected files found**.
-
-**Dependencies**  
-`fs`, `path`, `picomatch`, `suite/components/proc.ts` (`logBoxCount`), `suite/types/logger.ts`
-
-**Behavior & details**
-
-- `discovered = all files under cwd (including ignored)`.
-- `considered = discovered − ignored`.
-- `presentFiles = ∪ matches of required patterns over considered (case-insensitive)`.
-- `missing = count(required patterns with 0 matches)`.
-- `breach = ∪ matches of forbidden patterns over considered`.
-- `unexpected = considered − (presentFiles ∪ breach)`.
-- Final line **last**: `❌ FAIL` (throws), `⚠️ WARN`, or `✅ OK`.
-
-**Error behavior**  
-Throws on **FAIL** (any missing or breach). **WARN** does not throw.
-
-**Notes**
-
-- The runner calls this **after** `.env` assertion and **before** any future merge step.
-- Per-scenario status is recorded internally for later suite summaries.
-
----
-
-## test/components/http-assert.ts (Planned)
-
-**Status:** Planned
-
-**Purpose**  
-Lightweight HTTP assertions for status, content, and headers.
-
-**At a glance**
-
-| Feature    | Notes                   |
-| ---------- | ----------------------- |
-| Status     | Single or one-of values |
-| Body match | `contains` substring    |
-| Headers    | Exact or regex          |
-
-**Exports (proposed)**
-
-```ts
-export async function httpGet(
-  url: string,
-  opts?: { headers?: Record<string, string>; timeoutMs?: number },
-): Promise<{ status: number; headers: Record<string, string>; body: string }>;
-
-export async function assertHttp(
-  baseUrl: string,
-  specs: Array<{
-    path: string;
-    expectStatus: number | number[];
-    contains?: string;
-    headers?: Record<string, string | RegExp>;
-  }>,
-  log?: import('../../suite/components/logger.ts').Logger,
-): Promise<void>;
-```
-
-**Inputs/Outputs**  
-Performs HTTP GETs and asserts responses; logs compact diffs.
-
-**Dependencies**  
-`http`, `https`, `url`
-
-**Behavior & details**  
-Retries with backoff (configurable) for flaky starts.
-
-**Error behavior**  
-Throws with response snippet to aid debugging.
-
----
-
-## test/components/env-update.ts (Planned)
-
-**Status:** Planned
-
-**Purpose**  
-Merge scenario `./.real-env/real.env` into the app’s `.env` **after** assertion, plus dynamic DB/env injection (e.g., suite PG vars), without clobbering user-sensitive keys unless requested.
-
-**At a glance**
-
-| Merge policy      | Notes                                          |
-| ----------------- | ---------------------------------------------- |
-| Preserve defaults | Don’t clobber explicit `PORT` unless asked     |
-| Inject PG         | Apply `SUITE_PG_*` + `PG_DB` for the scenario  |
-| Idempotent        | Safe re-run; comments preserved where possible |
+| Feature          | Notes                                                             |
+| ---------------- | ----------------------------------------------------------------- |
+| Selective merge  | Don't overwrite user `PORT` unless `overwritePort: true`          |
+| OAuth secrets    | Inject Google/Microsoft/etc credentials from `.real-env/real.env` |
+| Suite PG env     | Inject `SUITE_PG_HOST\|PORT\|USER\|PASS` from global setup        |
+| Per-scenario DB  | Set `PG_DB=e2e_scenario_<name>` for test isolation                |
+| Comment preserve | Keep scaffolded structure readable where possible                 |
+| Diff logging     | Optional boxed diff showing what changed                          |
 
 **Exports (proposed)**
 
 ```ts
 export type EnvMergeOptions = {
-  overwritePort?: boolean;
-  keepComments?: boolean;
+  overwritePort?: boolean; // default false - preserve scaffolded PORT
+  keepComments?: boolean; // default true - preserve comment structure
+  diffBox?: boolean; // default true in test logs
 };
 
-export async function writeMergedEnv(
-  appDir: string,
-  realEnvPath: string,
-  inject: Record<string, string | number | boolean>,
-  opts?: EnvMergeOptions,
-): Promise<string>; // returns path written
+export async function mergeEnv(opts: {
+  appDir: string;
+  realEnvPath: string; // path to .real-env/real.env
+  inject?: Record<string, string | number | boolean>; // suite PG vars + scenario DB
+  mergeOpts?: EnvMergeOptions;
+  log?: import('../../suite/components/logger.ts').Logger;
+}): Promise<{ updated: string[]; preserved: string[]; injected: string[] }>;
 ```
 
 **Inputs/Outputs**  
-Reads app `.env` + `.real-env/real.env`; writes updated `.env`.
+Reads app `.env` + `.real-env/real.env`; writes merged `.env`; returns summary of changes.
 
 **Dependencies**  
-`fs-extra`, `path`, tiny `.env` parser (local)
+`fs-extra`, `path`, tiny `.env` parser (local or use `dotenv`)
 
-**Behavior & details**  
-Stable ordering of keys; comments retained when feasible.
+**Behavior & details**
+
+- Parse both files into `{ active: Map, commented: Map }`
+- Merge strategy:
+  1. Preserve scaffolded structure (comments, blank lines, ordering)
+  2. Update active values from `realEnv` (OAuth secrets, API keys)
+  3. Inject suite PG vars unless already present and `!overwritePort`
+  4. Add `PG_DB=e2e_scenario_<name>` for test isolation
+- Log a boxed diff if `diffBox: true`:
+  ```
+  ┌─ Environment merge ─────────────────────────────
+  │ Updated:  GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET
+  │ Injected: PG_HOST, PG_PORT, PG_USER, PG_PASS, PG_DB
+  │ Preserved: PORT, SESSION_SECRET (user-specified)
+  └─────────────────────────────────────────────────
+  ```
 
 **Error behavior**  
-Throws on missing inputs or write failures; logs a boxed diff.
+Throws on missing `.env` or `.real-env/real.env`; logs warning for missing injection keys.
+
+**Notes**  
+As of v0.5.0, enables transition from "scaffolded correctly" to "can actually run tests".
 
 ---
 
-## test/components/pg-assert.ts (Planned)
+## test/components/server-assert.ts (Planned)
 
-**Status:** Planned
+**Status:** Planned (v0.5.0)
 
 **Purpose**  
-Smoke-check DB connectivity and (optionally) presence of session tables.
+Start the scaffolded app, verify it boots successfully, probe readiness, and manage server lifecycle (start/stop/graceful shutdown).
 
 **At a glance**
 
-| Check          | Notes                         |
-| -------------- | ----------------------------- |
-| Connectivity   | Connect and `SELECT 1`        |
-| Session tables | Optional existence assertions |
+| Feature           | Notes                                              |
+| ----------------- | -------------------------------------------------- |
+| Start             | Spawn `npm run dev` or `node server.js`            |
+| Readiness         | Wait for HTTP probe (default: `GET / → 200`)       |
+| Timeout           | Configurable boot timeout (default: 30s)           |
+| Port detection    | Parse actual port from logs if `PORT=0` (random)   |
+| Lifecycle         | Returns `{ stop(), baseUrl }` for test usage       |
+| Graceful shutdown | Test SIGTERM handling and clean shutdown           |
+| Error cases       | Port conflict, crashes, timeouts, binding failures |
 
 **Exports (proposed)**
 
 ```ts
-export async function assertPgConnects(
-  pg: import('../../suite/components/pg-env.ts').PgEnv,
-  dbName: string,
-): Promise<void>;
-export async function assertSessionTables(
-  pg: import('../../suite/components/pg-env.ts').PgEnv,
-  dbName: string,
-): Promise<void>;
+export type ServerOptions = {
+  appDir: string;
+  command?: string; // default "npm run dev"
+  env?: Record<string, string | undefined>;
+  readiness?: {
+    path?: string; // default "/"
+    status?: number; // default 200
+    timeoutMs?: number; // default 30000
+    retries?: number; // default 10
+    retryDelayMs?: number; // default 1000
+  };
+  log?: import('../../suite/components/logger.ts').Logger;
+};
+
+export type ServerHandle = {
+  url: string; // base URL with actual port
+  stop: () => Promise<void>;
+  pid: number;
+};
+
+export async function startServer(opts: ServerOptions): Promise<ServerHandle>;
+
+export async function assertGracefulShutdown(opts: {
+  appDir: string;
+  expectedLogPattern?: RegExp; // default /server closed/i
+  maxShutdownMs?: number; // default 5000
+  log?: import('../../suite/components/logger.ts').Logger;
+}): Promise<void>;
 ```
 
 **Inputs/Outputs**  
-Connects with `pg`; throws on failures.
+Spawns server process; returns handle with `stop()` and `url`; logs boxed server output.
 
 **Dependencies**  
-`pg`
+`execa`, `http/https`, `suite/components/proc.ts`, `suite/components/logger.ts`
 
-**Behavior & details**  
-Respects per-test search path or DB name based on scenario design.
+**Behavior & details**
+
+- Spawn with `openBoxedProcess` for streaming logs
+- Parse port from:
+  1. Explicit `PORT` env var
+  2. Server startup logs (regex: `/listening.*:(\d+)/i`)
+  3. Fallback to testing common ports (3000, 8080, etc.)
+- Readiness probe with exponential backoff:
+  - Retry on ECONNREFUSED
+  - Fail on non-2xx after retries exhausted
+  - Log each attempt at debug level
+- `assertGracefulShutdown()`:
+  1. Start server
+  2. Send SIGTERM
+  3. Wait for "Server closed" log (or custom pattern)
+  4. Verify process exits within timeout
+  5. Check no orphaned connections
+- Boxed server output includes startup logs and any errors
 
 **Error behavior**  
-Throws with SQL error details.
+Throws on: port conflicts (EADDRINUSE), boot failures, timeout, non-2xx readiness responses. Logs include full server output for debugging.
+
+**Notes**  
+As of v0.5.0, server lifecycle is: start → run all HTTP/auth/session tests → assert graceful shutdown → final cleanup.
+
+---
+
+## test/components/http-assert.ts (Planned)
+
+**Status:** Planned (v0.6.0)
+
+**Purpose**  
+Test public HTTP routes (non-auth) including health checks, static assets, and API endpoints. Validates status codes, headers, and response content.
+
+**At a glance**
+
+| Feature       | Notes                                              |
+| ------------- | -------------------------------------------------- |
+| Public routes | Health checks, static files, public APIs           |
+| Status codes  | Single or array of acceptable codes                |
+| Headers       | Exact match or regex for content-type, cache, etc. |
+| Body content  | Substring match for basic validation               |
+| Static assets | Favicon, CSS, JS with content-type validation      |
+| Error cases   | 404, 500, connection failures                      |
+
+**Exports (proposed)**
+
+```ts
+export type HttpRoute = {
+  path: string;
+  method?: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH'; // default GET
+  status: number | number[]; // acceptable status codes
+  headers?: Record<string, string | RegExp>; // header assertions
+  contains?: string; // response body substring
+  timeoutMs?: number; // default 5000
+};
+
+export type HttpAssertOptions = {
+  baseUrl: string;
+  routes: HttpRoute[];
+  log?: import('../../suite/components/logger.ts').Logger;
+};
+
+export async function assertHttpRoutes(opts: HttpAssertOptions): Promise<void>;
+
+// Low-level helper
+export async function httpRequest(opts: {
+  url: string;
+  method?: string;
+  headers?: Record<string, string>;
+  body?: string;
+  timeoutMs?: number;
+}): Promise<{
+  status: number;
+  headers: Record<string, string>;
+  body: string;
+}>;
+```
+
+**Inputs/Outputs**  
+Makes HTTP requests; validates responses; logs failures with response snippets.
+
+**Dependencies**  
+`http`, `https`, `url`
+
+**Behavior & details**
+
+- Load routes from `manifest/routes.json` filtered by `!requiresAuth`
+- For each route:
+  - Make HTTP request (GET/POST/etc.)
+  - Validate status code (exact or one-of array)
+  - Validate headers (exact string or regex match)
+  - Validate body contains substring (if specified)
+- Static asset examples:
+  ```json
+  { "path": "/favicon.ico", "method": "GET", "status": 200,
+    "headers": { "content-type": "image/x-icon" } }
+  { "path": "/styles.css", "method": "GET", "status": 200,
+    "headers": { "content-type": "text/css" } }
+  ```
+- Error status codes: Test 404 for non-existent routes, 500 for error handlers
+- Compact log output:
+  ```
+  ✅ GET / → 200 (contains "Welcome")
+  ✅ GET /api/health → 200
+  ✅ GET /favicon.ico → 200 (content-type: image/x-icon)
+  ❌ GET /nonexistent → 404 (expected, got 200)
+  ```
+
+**Error behavior**  
+Throws on: status mismatch, header mismatch, missing substring, connection failures, timeouts. Includes response snippet (first 500 chars) in error message.
+
+**Notes**  
+As of v0.6.0, handles all public routes. Auth-protected routes tested by `auth-assert.ts`.
 
 ---
 
 ## test/components/auth-assert.ts (Planned)
 
-**Status:** Planned
+**Status:** Planned (v0.6.0)
 
 **Purpose**  
-Exercise **local** auth happy path: signup → login → protected route.
+Test authentication flows across all providers (local, OAuth, bearer) including registration, login, logout, protected routes, and account management. Provider-aware with shared logic for post-auth flows.
 
 **At a glance**
 
-| Step   | Notes                                |
-| ------ | ------------------------------------ |
-| Signup | POST form / JSON (configurable)      |
-| Login  | Establish session/cookie             |
-| Access | Confirm protected route is reachable |
+| Provider  | Auth Method                | Flows Tested                              |
+| --------- | -------------------------- | ----------------------------------------- |
+| local     | Form POST (email/password) | Register, login, logout, protected routes |
+| google    | OAuth redirect             | Callback, login, logout, protected routes |
+| microsoft | OAuth redirect             | Callback, login, logout, protected routes |
+| bearer    | API key/token              | Token auth, protected routes              |
 
 **Exports (proposed)**
 
 ```ts
-export type AuthFlowOptions = {
-  signupPath?: string;
-  loginPath?: string;
-  protectedPath?: string;
-  bodyKind?: 'form' | 'json';
+export type AuthProvider = 'local' | 'google' | 'microsoft' | 'bearer';
+
+export type AuthFlowSpec = {
+  provider: AuthProvider;
+  flows: {
+    register?: {
+      email: string;
+      password: string;
+      expectStatus: number; // 200 or 201
+      expectErrors?: string[]; // test validation: "Email required", etc.
+    };
+    login?: {
+      email: string;
+      password: string;
+      expectStatus: number; // 200 or 302
+      expectCookie?: string; // session cookie name
+    };
+    logout?: {
+      expectStatus: number; // 200 or 302
+      expectRedirect?: string; // redirect path
+    };
+    protected?: {
+      path: string;
+      method?: string;
+      expectStatus: number; // 200 when authed, 401/302 when not
+    }[];
+    accountPassword?: {
+      oldPassword: string;
+      newPassword: string;
+      expectStatus: number;
+    };
+  };
 };
 
-export async function assertLocalAuthFlow(baseUrl: string, opts?: AuthFlowOptions): Promise<void>;
+export async function assertAuthFlows(opts: {
+  baseUrl: string;
+  spec: AuthFlowSpec;
+  log?: import('../../suite/components/logger.ts').Logger;
+}): Promise<void>;
+
+// Provider-specific helpers
+export async function assertLocalAuth(
+  baseUrl: string,
+  flows: AuthFlowSpec['flows'],
+  log?: Logger,
+): Promise<void>;
+
+export async function assertOAuthCallback(
+  baseUrl: string,
+  provider: 'google' | 'microsoft',
+  flows: AuthFlowSpec['flows'],
+  log?: Logger,
+): Promise<void>;
+
+export async function assertBearerAuth(
+  baseUrl: string,
+  flows: AuthFlowSpec['flows'],
+  log?: Logger,
+): Promise<void>;
 ```
 
-**Inputs/Outputs**
+**Inputs/Outputs**  
+Makes authenticated HTTP requests; validates auth flows; stores session cookies; returns success/failure per flow.
+
+**Dependencies**  
+`http/https`, `cookie` parser, `test/components/http-assert.ts` (low-level requests)
+
+**Behavior & details**
+
+- **Local auth flow**:
+  1. POST `/auth/register` with email/password → 200/201 + session cookie
+  2. POST `/auth/login` with email/password → 200/302 + session cookie
+  3. GET protected route with cookie → 200
+  4. POST `/auth/logout` with cookie → 200/302 + cookie cleared
+  5. GET protected route without cookie → 401/302
+- **OAuth flow** (simplified - may require mock provider):
+  1. Simulate OAuth callback with mock token
+  2. Verify session established
+  3. Test protected routes with session
+  4. Test logout
+
+- **Bearer auth flow**:
+  1. GET protected route with `Authorization: Bearer <token>` → 200
+  2. GET protected route without header → 401
+  3. GET protected route with invalid token → 401
+
+- **Error handling** (built-in):
+  - Invalid credentials → 401
+  - Missing required fields → 400
+  - CSRF token mismatch → 403
+  - Rate limiting (if implemented) → 429
+  - Account locked → 403
+
+- Compact log output:
+  ```
+  ✅ local: register → 201 (session cookie set)
+  ✅ local: login → 200 (session cookie set)
+  ✅ local: protected route /account → 200 (authed)
+  ✅ local: logout → 302 (cookie cleared)
+  ❌ local: protected route /account → 401 (not authed, expected)
+  ```
+
+**Error behavior**  
+Throws on: unexpected status codes, missing cookies, session not established, protected route accessible without auth. Includes request/response details in error messages.
+
+**Notes**  
+As of v0.6.0, handles all auth providers with shared post-auth logic. OAuth flows may require manual token injection or mock provider setup.
+
+---
+
+## test/components/session-assert.ts (Planned)
+
+**Status:** Planned (v0.6.0)
+
+**Purpose**  
+Test session persistence across multiple HTTP requests, session expiry, and session store behavior independent of authentication flows.
+
+**At a glance**
+
+| Feature        | Notes                                           |
+| -------------- | ----------------------------------------------- |
+| Cookie storage | Verify session cookie set and stored correctly  |
+| Multi-request  | Session persists across sequential requests     |
+| Expiry         | Test session timeout/max-age behavior           |
+| Session store  | Verify Postgres-backed sessions (if applicable) |
+| Edge cases     | Invalid session ID, expired sessions, cleared   |
+
+**Exports (proposed)**
+
+```ts
+export type SessionOptions = {
+  baseUrl: string;
+  loginPath?: string; // default "/auth/login"
+  protectedPath?: string; // default "/account"
+  credentials?: { email: string; password: string };
+  sessionCookieName?: string; // default "connect.sid"
+  log?: import('../../suite/components/logger.ts').Logger;
+};
+
+export async function assertSessionPersistence(opts: SessionOptions): Promise<void>;
+
+export async function assertSessionExpiry(
+  opts: SessionOptions & {
+    maxAge?: number; // test session expiry after X seconds
+  },
+): Promise<void>;
+
+export async function assertSessionStore(
+  opts: SessionOptions & {
+    pgEnv: import('../../suite/components/pg-env.ts').PgEnv;
+    dbName: string;
+  },
+): Promise<void>;
+```
+
+**Inputs/Outputs**  
+Makes sequential HTTP requests; validates session cookie behavior; queries session store if applicable.
+
+**Dependencies**  
+`http/https`, `cookie` parser, `pg` (for session store validation), `test/components/http-assert.ts`
+
+**Behavior & details**
+
+- **Persistence test**:
+  1. Login → Get session cookie
+  2. Request protected route with cookie → 200
+  3. Make second request with same cookie → 200 (session still valid)
+  4. Clear cookie
+  5. Request protected route without cookie → 401/302
+
+- **Expiry test**:
+  1. Login → Get session cookie with `maxAge`
+  2. Wait for `maxAge + 1` seconds
+  3. Request protected route with expired cookie → 401/302
+
+- **Session store test** (Postgres):
+  1. Login → Get session cookie
+  2. Query `sessions` table for session ID
+  3. Verify session row exists with correct `user_id`
+  4. Logout → Verify session row deleted or invalidated
+
+- **Edge cases**:
+  - Invalid session ID (random cookie value) → 401
+  - Corrupted cookie → 400/401
+  - Session store unavailable → 500 (graceful degradation)
+
+- Compact log output:
+  ```
+  ✅ Session cookie set after login
+  ✅ Session persists across requests (2/2 successful)
+  ✅ Session expires after 60s
+  ✅ Session stored in Postgres (user_id: 123)
+  ✅ Session cleared after logout
+  ```
+
+**Error behavior**  
+Throws on: session not persisting, cookie not cleared on logout, session store inconsistencies. Includes cookie values and session IDs in error messages (redacted in CI logs).
+
+**Notes**  
+As of v0.6.0, separate from auth-assert for clarity and testability of session behavior independent of auth flows.
+
+---
+
+## test/components/pg-assert.ts (Planned)
+
+**Status:** Planned (v0.7.0)
+
+**Purpose**  
+Validate database structure (tables, columns, indexes, foreign keys, constraints) and optionally test data integrity via nested JSON manifest.
+
+**At a glance**
+
+| Feature      | Notes                                                  |
+| ------------ | ------------------------------------------------------ |
+| Tables       | Verify existence, required/optional designation        |
+| Columns      | Validate names, types, nullability, defaults           |
+| Indexes      | Check unique, btree, composite indexes                 |
+| Foreign keys | Validate relationships and referential integrity       |
+| Primary keys | Ensure PK constraints exist                            |
+| Values       | Optional row count, test data existence                |
+| Error cases  | Missing tables/columns, type mismatches, FK violations |
+
+**Exports (proposed)**
+
+```ts
+export type PgColumnSpec = {
+  type: string; // e.g., "integer", "varchar", "timestamp"
+  nullable?: boolean; // default true
+  primaryKey?: boolean;
+  unique?: boolean;
+  default?: string; // SQL default expression
+};
+
+export type PgIndexSpec = {
+  columns: string[];
+  unique?: boolean;
+  type?: 'btree' | 'hash' | 'gin' | 'gist'; // default btree
+};
+
+export type PgForeignKeySpec = {
+  column: string;
+  references: string; // "table(column)"
+  onDelete?: 'CASCADE' | 'SET NULL' | 'RESTRICT';
+  onUpdate?: 'CASCADE' | 'SET NULL' | 'RESTRICT';
+};
+
+export type PgTableSpec = {
+  required: boolean;
+  columns: Record<string, PgColumnSpec>;
+  indexes?: Record<string, PgIndexSpec>;
+  foreignKeys?: Record<string, PgForeignKeySpec>;
+  values?: {
+    minCount?: number; // minimum row count
+    maxCount?: number; // maximum row count
+    testRows?: Array<Record<string, any>>; // rows that must exist
+  };
+};
+
+export type PgManifest = {
+  tables: Record<string, PgTableSpec>;
+};
+
+export async function assertPgStructure(opts: {
+  pgEnv: import('../../suite/components/pg-env.ts').PgEnv;
+  dbName: string;
+  manifest: PgManifest;
+  log?: import('../../suite/components/logger.ts').Logger;
+}): Promise<void>;
+```
+
+**Inputs/Outputs**  
+Connects to Postgres; queries `information_schema` and `pg_catalog`; validates against manifest; logs discrepancies.
+
+**Dependencies**  
+`pg`, `suite/components/pg-env.ts`
+
+**Behavior & details**
+
+- Query `information_schema.tables` for table existence
+- Query `information_schema.columns` for column names/types/nullability
+- Query `information_schema.table_constraints` for primary keys/unique constraints
+- Query `information_schema.referential_constraints` for foreign keys
+- Query `pg_indexes` for index details
+- For each table in manifest:
+  1. Verify table exists (FAIL if required and missing)
+  2. Verify all specified columns exist with correct types
+  3. Verify indexes exist with correct columns and uniqueness
+  4. Verify foreign keys reference correct tables/columns
+  5. Optionally validate row counts and test data
+
+- Manifest example:
+
+  ```json
+  {
+    "tables": {
+      "users": {
+        "required": true,
+        "columns": {
+          "id": { "type": "integer", "primaryKey": true },
+          "email": { "type": "character varying", "unique": true, "nullable": false },
+          "password_hash": { "type": "character varying" },
+          "created_at": { "type": "timestamp without time zone", "default": "now()" }
+        },
+        "indexes": {
+          "users_email_key": { "columns": ["email"], "unique": true }
+        },
+        "values": { "minCount": 0 }
+      },
+      "sessions": {
+        "required": true,
+        "columns": {
+          "sid": { "type": "character varying", "primaryKey": true },
+          "sess": { "type": "json", "nullable": false },
+          "expire": { "type": "timestamp without time zone", "nullable": false },
+          "user_id": { "type": "integer" }
+        },
+        "foreignKeys": {
+          "fk_user": {
+            "column": "user_id",
+            "references": "users(id)",
+            "onDelete": "CASCADE"
+          }
+        }
+      }
+    }
+  }
+  ```
+
+- Compact log output:
+  ```
+  ✅ Table 'users' exists (4 columns, 1 index, 0 foreign keys)
+  ✅ Table 'sessions' exists (4 columns, 0 indexes, 1 foreign key)
+  ✅ Column 'users.email' is unique and not null
+  ✅ Foreign key 'sessions.user_id' → 'users(id)' with CASCADE
+  ❌ Missing column 'users.phone' (optional)
+  ❌ Index 'users_email_key' not unique (expected unique)
+  ```
+
+**Error behavior**  
+Throws on: missing required tables/columns, type mismatches, missing constraints, FK violations. Includes SQL query results in error messages for debugging.
+
+**Notes**  
+As of v0.7.0, validates database structure after server tests. Future: add migration testing and schema evolution validation.
