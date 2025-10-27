@@ -116,6 +116,17 @@ We use `--spec=draft2020` for AJV.
 
 ---
 
+## New in v0.4.4
+
+- **Constants refactoring**: Centralized all hardcoded strings and timeout values into two dedicated files:
+  - `suite/components/constants.ts`: 18 infrastructure constants (filenames, patterns, directories, env vars)
+  - `test/components/test-constants.ts`: 4 test timeout constants (per-prompt and test-level timeouts)
+  - Refactored 10 files to use constants for improved maintainability
+- **Bug fixes**:
+  - Schema test box now closes immediately after schema section (was closing after scenarios due to stale filename pattern)
+  - Schema tests now stream progressively (fixed activeFileKey clearing bug that caused buffering)
+  - Interactive test timeout handling improved (increased to 180s, better diagnostic messages)
+
 ## New in v0.4.3
 
 - **Suite and Schema test failure reporting**: Tests now properly record and display failure steps with accurate pass/fail counts.

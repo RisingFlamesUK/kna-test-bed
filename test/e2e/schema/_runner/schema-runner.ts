@@ -11,6 +11,13 @@ import {
 } from '../../../../suite/components/logger.ts';
 import { createCI } from '../../../../suite/components/ci.ts';
 import { recordSchemaStep } from '../../../../suite/components/area-detail.ts';
+import {
+  ENV_LOG_STAMP,
+  LOGS_DIR,
+  E2E_DIR,
+  SCHEMA_LOG_FILE,
+} from '../../../../suite/components/constants.ts';
+import { SCHEMA_TEST_TIMEOUT_MS } from '../../../components/test-constants.ts';
 import type { SchemaConfigFile, SchemaFileEntry } from './types.ts';
 
 /**
@@ -173,57 +180,61 @@ export async function runSchemaTestsFromFile(configPath: string) {
   // eslint-disable-next-line vitest/valid-title
   describe(config.describe ?? 'schema validation', () => {
     // eslint-disable-next-line vitest/expect-expect
-    it('validated all configured files against their schemas', async () => {
-      let totalFailed = 0;
+    it(
+      'validated all configured files against their schemas',
+      async () => {
+        let totalFailed = 0;
 
-      if (config.files.length === 0) {
-        log.step('No files configured for validation');
-        log.write('⚠️ No files configured');
-        recordSchemaStep('skip', 'No files configured');
-        await (log as any)?.close?.();
-        return;
-      }
-
-      // Process each file entry
-      for (const entry of config.files) {
-        const schema = getSchemaForEntry(entry, config.defaultSchema);
-        const files = await expandPattern(entry.pattern);
-
-        if (files.length === 0) {
-          log.step(`Pattern matched no files: ${entry.pattern}`);
-          log.write('⚠️ No files matched');
-          recordSchemaStep('skip', `${entry.name}: no files matched`);
-          continue;
+        if (config.files.length === 0) {
+          log.step('No files configured for validation');
+          log.write('⚠️ No files configured');
+          recordSchemaStep('skip', 'No files configured');
+          await (log as any)?.close?.();
+          return;
         }
 
-        // Validate each matched file
-        for (const file of files) {
-          const result = await validateFile(file, schema, log);
-          if (!result.passed) {
-            totalFailed++;
+        // Process each file entry
+        for (const entry of config.files) {
+          const schema = getSchemaForEntry(entry, config.defaultSchema);
+          const files = await expandPattern(entry.pattern);
+
+          if (files.length === 0) {
+            log.step(`Pattern matched no files: ${entry.pattern}`);
+            log.write('⚠️ No files matched');
+            recordSchemaStep('skip', `${entry.name}: no files matched`);
+            continue;
+          }
+
+          // Validate each matched file
+          for (const file of files) {
+            const result = await validateFile(file, schema, log);
+            if (!result.passed) {
+              totalFailed++;
+            }
           }
         }
-      }
 
-      // Explicit log line (absolute file URL)
-      const stamp = process.env.KNA_LOG_STAMP || '';
-      const absLog = (
-        stamp
-          ? buildScenarioLogPath(stamp, 'schema-validation')
-          : path.resolve('logs', 'latest', 'e2e', 'schema-validation.log')
-      )
-        .replace(/\\/g, '/')
-        .replace(/ /g, '%20');
-      ci.write(`log: file:///${absLog}`);
+        // Explicit log line (absolute file URL)
+        const stamp = process.env[ENV_LOG_STAMP] || '';
+        const absLog = (
+          stamp
+            ? buildScenarioLogPath(stamp, 'schema-validation')
+            : path.resolve(LOGS_DIR, 'latest', E2E_DIR, SCHEMA_LOG_FILE)
+        )
+          .replace(/\\/g, '/')
+          .replace(/ /g, '%20');
+        ci.write(`log: file:///${absLog}`);
 
-      await (log as any)?.close?.();
+        await (log as any)?.close?.();
 
-      // Throw if any files failed
-      if (totalFailed > 0) {
-        throw new Error(
-          `Schema validation failed: ${totalFailed} file${totalFailed !== 1 ? 's' : ''} invalid`,
-        );
-      }
-    }, 60_000);
+        // Throw if any files failed
+        if (totalFailed > 0) {
+          throw new Error(
+            `Schema validation failed: ${totalFailed} file${totalFailed !== 1 ? 's' : ''} invalid`,
+          );
+        }
+      },
+      SCHEMA_TEST_TIMEOUT_MS,
+    ); // 1 minute - ajv validation can be slow for many files
   });
 }

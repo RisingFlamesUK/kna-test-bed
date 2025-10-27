@@ -29,6 +29,7 @@
 - Test Components
   - [`test/components/scaffold-command-assert.ts`](#testcomponentsscaffold-command-assertts)
   - [`test/components/interactive-driver.ts`](#testcomponentsinteractive-driverts)
+  - [`test/components/test-constants.ts`](#testcomponentstest-constantsts)
   - [`test/components/env-assert.ts`](#testcomponentsenv-assertts)
   - [`test/components/fs-assert.ts`](#testcomponentsfs-assertts)
 
@@ -131,39 +132,84 @@ Logs fail lines and still returns a teardown that prints the logs pointer.
 **Status:** Implemented
 
 **Purpose**  
-Shared constants for labels and temp directory paths.
+Centralized infrastructure constants for filenames, patterns, directories, environment variables, and default paths. Single source of truth for all hardcoded strings used across the test suite.
 
 **At a glance**
 
-| Name            | Meaning                                   |
-| --------------- | ----------------------------------------- |
-| `KNA_LABEL`     | Docker label used to tag suite resources  |
-| `TMP_DIR_NAME`  | Basename for temp workspace (`.tmp`)      |
-| `KNA_TMP_DIR`   | Optional override for temp root (env var) |
-| `SUITE_BULLET`  | Reporter bullet for Suite group header    |
-| `SCHEMA_BULLET` | Reporter bullet for Schema group header   |
+| Category                   | Constants                                                                                |
+| -------------------------- | ---------------------------------------------------------------------------------------- |
+| Docker/temp                | `KNA_LABEL`, `TMP_DIR_NAME`, `KNA_TMP_DIR`                                               |
+| Reporter bullets           | `SUITE_BULLET`, `SCHEMA_BULLET`                                                          |
+| JSON artifact filenames    | `SUITE_DETAIL_FILE`, `SCHEMA_DETAIL_FILE`, `SCENARIO_DETAIL_FILE`, `VITEST_SUMMARY_FILE` |
+| Log filenames              | `SUITE_LOG_FILE`, `SCHEMA_LOG_FILE`                                                      |
+| Test patterns (regex)      | `SUITE_TEST_PATTERN`, `SCHEMA_TEST_PATTERN`, `SCENARIO_TEST_PATTERN`                     |
+| Directory paths            | `LOGS_DIR`, `E2E_DIR`, `TEST_E2E_DIR`, `SCHEMA_CONFIG_DIR`, `SCHEMA_FIXTURES_DIR`        |
+| Environment variable names | `ENV_LOG_STAMP`, `ENV_PRE_RELEASE_VERSION`, `ENV_SCENARIO_CONFIG`                        |
+| Default paths              | `DEFAULT_PROMPT_MAP`                                                                     |
 
 **Exports**
 
 ```ts
+// Docker/temp
 export const KNA_LABEL: string;
 export const TMP_DIR_NAME: string;
 export const KNA_TMP_DIR: string;
+
+// Reporter bullets
 export const SUITE_BULLET: string;
 export const SCHEMA_BULLET: string;
+
+// JSON artifact filenames
+export const SUITE_DETAIL_FILE: string; // "_suite-detail.json"
+export const SCHEMA_DETAIL_FILE: string; // "_schema-detail.json"
+export const SCENARIO_DETAIL_FILE: string; // "_scenario-detail.json"
+export const VITEST_SUMMARY_FILE: string; // "_vitest-summary.json"
+
+// Log filenames
+export const SUITE_LOG_FILE: string; // "suite-sentinel.log"
+export const SCHEMA_LOG_FILE: string; // "schema-validation.log"
+
+// Test patterns
+export const SUITE_TEST_PATTERN: RegExp; // /suite\.test\.ts$/i
+export const SCHEMA_TEST_PATTERN: RegExp; // /schema.*\.test\.ts$/i
+export const SCENARIO_TEST_PATTERN: RegExp; // /scenarios\/.*\.test\.ts$/i
+
+// Directory paths
+export const LOGS_DIR: string; // "logs"
+export const E2E_DIR: string; // "e2e"
+export const TEST_E2E_DIR: string; // "test/e2e"
+export const SCHEMA_CONFIG_DIR: string; // "test/e2e/schema/config"
+export const SCHEMA_FIXTURES_DIR: string; // "test/e2e/schema/fixtures"
+
+// Environment variable names
+export const ENV_LOG_STAMP: string; // "KNA_LOG_STAMP"
+export const ENV_PRE_RELEASE_VERSION: string; // "PRE_RELEASE_VERSION"
+export const ENV_SCENARIO_CONFIG: string; // "SCENARIO_CONFIG"
+
+// Default paths
+export const DEFAULT_PROMPT_MAP: string; // "test/e2e/schema/fixtures/prompt-map-valid.json"
 ```
 
 **Inputs/Outputs**  
-Reads optional env vars; no IO.
+Reads optional env vars for `KNA_TMP_DIR`; no other I/O.
 
 **Dependencies**  
 None
 
 **Behavior & details**  
-Used by Docker helpers and scaffold helpers for consistent naming/paths. Reporter bullets keep output phrasing consistent.
+Used throughout the test suite for consistent naming and path resolution:
+
+- Reporter uses patterns to detect test types and match filenames for box closing
+- Sequencer uses patterns to enforce test execution order
+- Detail I/O uses filenames and directory paths to read/write JSON artifacts
+- Schema runner uses config/fixtures directories for test resolution
+- Global setup uses log filenames for suite-level logging
 
 **Error behavior**  
-N/A
+N/A (constants only)
+
+**Notes**  
+As of v0.4.4, all infrastructure strings are centralized here (18 constants total). This prevents bugs from stale references and provides a single source of truth for path/pattern changes.
 
 ---
 
@@ -916,6 +962,52 @@ Returns normally with `timedOutAt` set to the prompt index on timeout (does not 
 
 **Notes**  
 As of v0.4.3, the scaffold assertion properly detects timeouts via the `timedOutAt` field and reports them as test failures with clear diagnostic output.
+
+---
+
+## test/components/test-constants.ts
+
+**Status:** Implemented
+
+**Purpose**  
+Centralized timeout constants for test infrastructure. Single source of truth for per-prompt and test-level timeout values.
+
+**At a glance**
+
+| Constant                     | Value   | Purpose                                               |
+| ---------------------------- | ------- | ----------------------------------------------------- |
+| `PROMPT_TIMEOUT_MS`          | 15_000  | Default timeout for text/confirm prompts (15 seconds) |
+| `PROMPT_CHECKBOX_TIMEOUT_MS` | 20_000  | Timeout for checkbox menu prompts (20 seconds)        |
+| `SCHEMA_TEST_TIMEOUT_MS`     | 60_000  | Test-level timeout for schema validation (1 minute)   |
+| `SCENARIO_TEST_TIMEOUT_MS`   | 180_000 | Test-level timeout for scenario tests (3 minutes)     |
+
+**Exports**
+
+```ts
+export const PROMPT_TIMEOUT_MS: number;
+export const PROMPT_CHECKBOX_TIMEOUT_MS: number;
+export const SCHEMA_TEST_TIMEOUT_MS: number;
+export const SCENARIO_TEST_TIMEOUT_MS: number;
+```
+
+**Inputs/Outputs**  
+Pure constants; no I/O.
+
+**Dependencies**  
+None
+
+**Behavior & details**
+
+- Used by `interactive-driver.ts` for per-prompt default timeouts (fallback when `timeoutMs` not specified in prompt).
+- Used by `scenario-runner.ts` for test-level timeout (Vitest `test(..., timeout)`) and per-prompt defaults.
+- Used by `schema-runner.ts` for test-level timeout.
+- Scenario timeout increased from 120s to 180s in v0.4.4 to prevent false failures on interactive tests.
+
+**Error behavior**  
+N/A (constants only)
+
+**Notes**  
+As of v0.4.4, all timeout values are centralized in this file for easy discovery and maintenance.
 
 ---
 

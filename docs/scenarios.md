@@ -207,7 +207,7 @@ Maps higher-level `include` tokens → concrete interactive prompts.
 ### Validate
 
 - Schema: `test/e2e/schema/config/prompt-map.schema.json`
-- Test: `test/e2e/schema/prompt-map.schema.test.ts`
+- Test: `test/e2e/schema/schema-validation.test.ts`
 - Run: `npx vitest` (schema validation runs as part of the test suite)
 
 ---

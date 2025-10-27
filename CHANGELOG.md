@@ -2,6 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.4.4] – 2025-10-27
+
+### Changed
+
+- **Schema test CI output title**: Changed schema test area bullet from "Validating prompt-map.json files..." to "Validating schema files..." to reflect the expanded scope (now validates 6 schema types, not just prompt-map).
+- **Constants refactoring**: Centralized all hardcoded strings into constants for improved maintainability and consistency:
+  - Added 18 new constants in `suite/components/constants.ts` across 6 categories: JSON artifact filenames (4), log filenames (2), test patterns (3), directory paths (5), environment variable names (3), and default paths (1).
+  - Added 4 test timeout constants in `test/components/test-constants.ts`: per-prompt timeouts (15s, 20s) and test-level timeouts (60s, 180s).
+  - Refactored 10 files to use constants: `detail-io.ts`, `sequencer.ts`, `vitest-reporter.ts`, `global-setup.ts`, `suite.test.ts`, `schema-runner.ts`, `scenario-runner.ts`, `interactive-driver.ts`, and previously existing `SUITE_BULLET`/`SCHEMA_BULLET` usage.
+  - Provides single source of truth for all infrastructure strings and timeout values, preventing bugs from stale references and making timeout tuning easier.
+
+### Fixed
+
+- **Schema test box closing**: Fixed critical bug where schema test output box was closing after scenario tests instead of immediately after schema section. Root cause: `vitest-reporter.ts` `onFinished` method was checking for old v0.4.2 filename pattern `prompt-map.schema.test.ts` instead of current `schema-validation.test.ts`. Now uses `SCHEMA_TEST_PATTERN` constant for correct detection.
+- **Schema test progressive streaming**: Fixed bug where schema test steps were buffered and dumped all at once instead of streaming progressively. Root cause: `performClose` method was unconditionally clearing `activeFileKey` after switching to the next area, preventing the polling mechanism from working. Now only clears `activeFileKey` when there are no more areas to process.
+- **Interactive test timeout handling**: Increased scenario test timeout from 120 seconds to 180 seconds to accommodate interactive prompts. Enhanced interactive driver timeout errors to include last 500 characters of output and prompt count for better diagnostics when timeouts occur.
+
 ## [0.4.3] – 2025-10-27
 
 ### Added

@@ -1,6 +1,7 @@
 // test/components/interactive-driver.ts
 import type { Logger } from '../../suite/types/logger.ts';
 import { openBoxedProcess } from '../../suite/components/proc.ts';
+import { PROMPT_TIMEOUT_MS, PROMPT_CHECKBOX_TIMEOUT_MS } from './test-constants.ts';
 
 const KEY = {
   up: '\x1B[A',
@@ -111,7 +112,14 @@ export async function runInteractive(opts: RunInteractiveOpts): Promise<RunInter
       proc.stderr?.on('data', onData);
       const timer = setTimeout(() => {
         clear();
-        reject(new Error(`Timeout waiting for: ${pattern}`));
+        const preview = outBuf.slice(-500); // last 500 chars for context
+        reject(
+          new Error(
+            `Timeout (${timeoutMs}ms) waiting for pattern: ${pattern}\n` +
+              `Last output (500 chars):\n${preview}\n` +
+              `Prompts processed before timeout: ${matchedSummaries.length}`,
+          ),
+        );
       }, timeoutMs);
     });
 
@@ -154,14 +162,14 @@ export async function runInteractive(opts: RunInteractiveOpts): Promise<RunInter
   }
 
   async function handleTextPrompt(p: TextPrompt) {
-    const timeout = p.timeoutMs ?? 15_000;
+    const timeout = p.timeoutMs ?? PROMPT_TIMEOUT_MS;
     await waitFor(p.expect, timeout);
     matchedSummaries.push(`Text    : ${String(p.expect)} → ${JSON.stringify(p.send)}`);
     proc.stdin?.write(p.send);
   }
 
   async function handleCheckboxPrompt(p: CheckboxPrompt) {
-    const timeout = p.timeoutMs ?? 20_000;
+    const timeout = p.timeoutMs ?? PROMPT_CHECKBOX_TIMEOUT_MS;
     await waitFor(p.expect, timeout);
 
     const targets = p.select.map((s) => s.trim().toLowerCase());

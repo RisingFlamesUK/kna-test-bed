@@ -12,6 +12,14 @@ import {
 import { ensureDocker } from './components/docker-suite.ts';
 import { ensurePg, PgHandle } from './components/pg-suite.ts';
 import type { ScenarioSeverity } from './components/scenario-status.ts';
+import {
+  ENV_LOG_STAMP,
+  E2E_DIR,
+  VITEST_SUMMARY_FILE,
+  SCENARIO_DETAIL_FILE,
+  SCHEMA_DETAIL_FILE,
+  SCHEMA_LOG_FILE,
+} from './components/constants.ts';
 
 const ICON: Record<ScenarioSeverity, string> = { ok: '✅', warn: '⚠️', fail: '❌' };
 
@@ -32,7 +40,7 @@ function printLogsPointer(stamp: string) {
 export default async function globalSetup(): Promise<void | (() => Promise<void>)> {
   // 1) Stamp + open suite log *before* doing anything that can fail
   const stamp = makeLogStamp();
-  process.env.KNA_LOG_STAMP = stamp;
+  process.env[ENV_LOG_STAMP] = stamp;
 
   const suiteLogPath = buildSuiteLogPath(stamp);
   const suiteLog = createLogger(suiteLogPath);
@@ -68,10 +76,10 @@ export default async function globalSetup(): Promise<void | (() => Promise<void>
       // --- Consolidated Step 7: Suite/Schema/Scenario summaries (before teardown) ---
       try {
         const root = buildLogRoot(stamp);
-        const e2eDir = path.join(root, 'e2e');
-        const vitestSummaryPath = path.join(e2eDir, '_vitest-summary.json');
-        const scenDetailPath = path.join(e2eDir, '_scenario-detail.json');
-        const schemaDetailPath = path.join(e2eDir, '_schema-detail.json');
+        const e2eDir = path.join(root, E2E_DIR);
+        const vitestSummaryPath = path.join(e2eDir, VITEST_SUMMARY_FILE);
+        const scenDetailPath = path.join(e2eDir, SCENARIO_DETAIL_FILE);
+        const schemaDetailPath = path.join(e2eDir, SCHEMA_DETAIL_FILE);
 
         const MARK: Record<string, string> = { pass: '✅', fail: '❌', skip: '↩️', unknown: '❓' };
 
@@ -138,7 +146,7 @@ export default async function globalSetup(): Promise<void | (() => Promise<void>
           }
 
           const absLog = path
-            .resolve(e2eDir, `schema-validation.log`)
+            .resolve(e2eDir, SCHEMA_LOG_FILE)
             .replace(/\\/g, '/')
             .replace(/ /g, '%20');
           suiteLog.write(`  │ - log: file:///${absLog}`);
@@ -147,7 +155,7 @@ export default async function globalSetup(): Promise<void | (() => Promise<void>
             `  └─ (tests: ${schemaDetail.length}, passed: ${okCount}, failed: ${failCount}, warning: ${warnCount}, skipped: ${skipCount})  ────────────────`,
           );
         } else {
-          suiteLog.write(`  (no _schema-detail.json found)`);
+          suiteLog.write(`  (no ${SCHEMA_DETAIL_FILE} found)`);
         }
 
         // 3) Scenario schema tests
@@ -217,7 +225,7 @@ export default async function globalSetup(): Promise<void | (() => Promise<void>
             `  └─ (tests: ${names.length}, passed: ${okCount}, failed: ${failCount}, warning: ${warnCount}, skipped: 0)  ────────────────`,
           );
         } else {
-          suiteLog.write(`  (no _scenario-detail.json found)`);
+          suiteLog.write(`  (no ${SCENARIO_DETAIL_FILE} found)`);
         }
       } catch (e: any) {
         suiteLog.write(`  (failed to render consolidated Step 7: ${e?.message ?? String(e)})`);

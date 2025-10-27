@@ -15,6 +15,7 @@ import type { ScenarioConfigFile, ScenarioEntry, PromptMap } from './types.ts';
 import type { Prompt } from '../../../components/interactive-driver.ts';
 import { assertFiles } from '../../../components/fs-assert.ts';
 import { recordScenarioSeverityFromEnv } from '../../../../suite/components/scenario-status.ts';
+import { PROMPT_TIMEOUT_MS, SCENARIO_TEST_TIMEOUT_MS } from '../../../components/test-constants.ts';
 
 type ResolveCtx = {
   configDir: string;
@@ -232,7 +233,7 @@ function defineScenario(entry: ScenarioEntry, ctx: ResolveCtx) {
         if ((log as any)?.close) await (log as any).close();
       }
     },
-    120_000,
+    SCENARIO_TEST_TIMEOUT_MS, // 3 minutes - allow time for interactive prompts
   );
 }
 
@@ -276,7 +277,7 @@ function includeToPrompts(
       type: 'text',
       expect: new RegExp(t.expect, 'i'),
       send: has(t.key) ? t.sendIfPresent : t.sendIfAbsent,
-      timeoutMs: t.timeoutMs ?? 15_000,
+      timeoutMs: t.timeoutMs ?? PROMPT_TIMEOUT_MS,
     });
   }
 
@@ -297,7 +298,7 @@ function includeToPrompts(
         select: selectedValues,
         required: c.required ?? true,
         maxScroll: c.maxScroll ?? 200,
-        timeoutMs: c.timeoutMs ?? 15_000,
+        timeoutMs: c.timeoutMs ?? PROMPT_TIMEOUT_MS,
       };
       if ((c as any).submitDefault) item.submit = true;
       prompts.push(item);
@@ -311,7 +312,7 @@ function includeToPrompts(
           type: 'text',
           expect: new RegExp(step.expect, 'i'),
           send: step.send,
-          timeoutMs: step.timeoutMs ?? 15_000,
+          timeoutMs: step.timeoutMs ?? PROMPT_TIMEOUT_MS,
         });
       }
     }
@@ -439,7 +440,7 @@ function coercePrompts(
         select: p.labels,
         required: p.required ?? true,
         maxScroll: p.maxScroll ?? 200,
-        timeoutMs: p.timeoutMs ?? 15_000,
+        timeoutMs: p.timeoutMs ?? PROMPT_TIMEOUT_MS,
       };
       return checkbox;
     }
@@ -447,7 +448,7 @@ function coercePrompts(
       type: 'text',
       expect: new RegExp(p.expect, 'i'),
       send: p.send,
-      timeoutMs: p.timeoutMs ?? 15_000,
+      timeoutMs: p.timeoutMs ?? PROMPT_TIMEOUT_MS,
     };
     return textPrompt;
   });

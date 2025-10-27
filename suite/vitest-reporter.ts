@@ -2,6 +2,18 @@
 import type { RunnerTestFile, RunnerTask } from 'vitest';
 import type { Reporter } from 'vitest/reporter';
 import { createCI } from './components/ci.ts';
+import {
+  SUITE_BULLET,
+  SCHEMA_BULLET,
+  SUITE_DETAIL_FILE,
+  SCHEMA_DETAIL_FILE,
+  SUITE_TEST_PATTERN,
+  SCHEMA_TEST_PATTERN,
+  SCENARIO_TEST_PATTERN,
+  LOGS_DIR,
+  E2E_DIR,
+  ENV_LOG_STAMP,
+} from './components/constants.ts';
 import * as fs from 'fs';
 import * as path from 'path';
 import { buildScenarioLogPath } from './components/logger.ts';
@@ -85,39 +97,39 @@ export default class TestReporter implements Reporter {
   }
 
   private getE2EDirForStamp(): string | null {
-    const stamp = process.env.KNA_LOG_STAMP;
+    const stamp = process.env[ENV_LOG_STAMP];
     if (!stamp) return null;
     return path.resolve('logs', stamp, 'e2e');
   }
 
   private getSuiteDetailPath(): string | null {
-    const stamp = process.env.KNA_LOG_STAMP;
+    const stamp = process.env[ENV_LOG_STAMP];
     if (!stamp) return null;
-    return path.resolve('logs', stamp, 'e2e', '_suite-detail.json');
+    return path.resolve(LOGS_DIR, stamp, E2E_DIR, SUITE_DETAIL_FILE);
   }
 
   private getSchemaDetailPath(): string | null {
-    const stamp = process.env.KNA_LOG_STAMP;
+    const stamp = process.env[ENV_LOG_STAMP];
     if (!stamp) return null;
-    return path.resolve('logs', stamp, 'e2e', '_schema-detail.json');
+    return path.resolve(LOGS_DIR, stamp, E2E_DIR, SCHEMA_DETAIL_FILE);
   }
 
   private isSuiteAreaByKey(fileKey: string): boolean {
     const area = this.areas.get(fileKey);
     const abs = ((area as any)?.meta?.testFileAbs ?? area?.filePathAbs ?? '').replace(/\\/g, '/');
-    return /test\/e2e(?:\/suite)?\/suite\.test\.ts$/i.test(abs);
+    return SUITE_TEST_PATTERN.test(abs);
   }
 
   private isSchemaRunnerAreaByKey(fileKey: string): boolean {
     const area = this.areas.get(fileKey);
     const abs = ((area as any)?.meta?.testFileAbs ?? area?.filePathAbs ?? '').replace(/\\/g, '/');
-    return /test\/e2e\/schema\/schema-validation\.test\.ts$/i.test(abs);
+    return SCHEMA_TEST_PATTERN.test(abs);
   }
 
   // Group bullets for non-scenario areas (Suite/Schema) are injected by the reporter
   private getNonScenarioGroupBullet(fileKey: string): string | null {
-    if (this.isSuiteAreaByKey(fileKey)) return '• Testing Docker PG Environment...';
-    if (this.isSchemaRunnerAreaByKey(fileKey)) return '• Validating prompt-map.json files...';
+    if (this.isSuiteAreaByKey(fileKey)) return SUITE_BULLET;
+    if (this.isSchemaRunnerAreaByKey(fileKey)) return SCHEMA_BULLET;
     return null;
   }
 
@@ -206,7 +218,7 @@ export default class TestReporter implements Reporter {
     if (this.nonScenarioLogEmitted.has(fileKey)) return;
     const area = this.areas.get(fileKey);
     if (!area) return;
-    const stamp = process.env.KNA_LOG_STAMP || '';
+    const stamp = process.env[ENV_LOG_STAMP] || '';
     const baseTs = path.basename(area.filePathAbs);
     const baseNoExt = baseTs.replace(/\.ts$/i, '');
     const isSuite = baseNoExt === 'suite.test';
@@ -392,7 +404,7 @@ export default class TestReporter implements Reporter {
   private isScenarioAreaByKey(fileKey: string): boolean {
     const area = this.areas.get(fileKey);
     const abs = ((area as any)?.meta?.testFileAbs ?? area?.filePathAbs ?? '').replace(/\\/g, '/');
-    return /test\/e2e\/scenarios\/(?!_runner\/).+\/.+\.test\.ts$/i.test(abs);
+    return SCENARIO_TEST_PATTERN.test(abs);
   }
 
   private getAreaName(fileName: string): string {
@@ -584,7 +596,7 @@ export default class TestReporter implements Reporter {
     // If we never saw an explicit log for this area at all, add a default now
     if (!(hadExplicitLog || sawExplicitInFlush)) {
       // No explicit log saw at all: emit discovered scenario logs (preferred) or a sensible default
-      const stamp = process.env.KNA_LOG_STAMP || '';
+      const stamp = process.env[ENV_LOG_STAMP] || '';
       const absHeader = area.filePathAbs.replace(/\\/g, '/');
       const isScenarioArea = /\/test\/e2e\/scenarios\//i.test(absHeader);
       if (isScenarioArea && stamp) {
@@ -728,6 +740,7 @@ export default class TestReporter implements Reporter {
       if (!this.activeFileKey) this.switchArea(area.filePathAbs);
       this.closeArea(area.filePathAbs);
       // Advance to the next file in original queue order
+      let switched = false;
       while (true) {
         const next = this.nextInQueue(key);
         if (!next) break;
@@ -745,11 +758,15 @@ export default class TestReporter implements Reporter {
           continue;
         } else {
           this.switchArea(nextArea.filePathAbs);
+          switched = true;
           break;
         }
       }
-      this.activeFileKey = null;
-      this.currentAreaKey = null;
+      // Only clear activeFileKey if we didn't switch to a new area
+      if (!switched) {
+        this.activeFileKey = null;
+        this.currentAreaKey = null;
+      }
     }
 
     const prev = this.closeTimers.get(key);
@@ -974,7 +991,7 @@ export default class TestReporter implements Reporter {
           const isScenarioArea2 = this.isScenarioAreaByKey(key);
           if (isScenarioArea2) {
             if (scenResolved) {
-              const stamp = process.env.KNA_LOG_STAMP || '';
+              const stamp = process.env[ENV_LOG_STAMP] || '';
               const candidate = stamp
                 ? buildScenarioLogPath(stamp, scenResolved)
                 : path.join('logs', 'latest', 'e2e', `${scenResolved}.log`);
@@ -1036,7 +1053,7 @@ export default class TestReporter implements Reporter {
           // After summary, emit log link immediately for scenario tests (buffered)
           const isScenarioArea2 = this.isScenarioAreaByKey(key);
           if (isScenarioArea2 && scenResolved) {
-            const stamp = process.env.KNA_LOG_STAMP || '';
+            const stamp = process.env[ENV_LOG_STAMP] || '';
             const candidate = stamp
               ? buildScenarioLogPath(stamp, scenResolved)
               : path.join('logs', 'latest', 'e2e', `${scenResolved}.log`);
@@ -1101,7 +1118,7 @@ export default class TestReporter implements Reporter {
           // After summary, prefer immediate log link for scenario tests
           const isScenarioArea2 = this.isScenarioAreaByKey(key);
           if (isScenarioArea2 && scenResolved) {
-            const stamp = process.env.KNA_LOG_STAMP || '';
+            const stamp = process.env[ENV_LOG_STAMP] || '';
             const candidate = stamp
               ? buildScenarioLogPath(stamp, scenResolved)
               : path.join('logs', 'latest', 'e2e', `${scenResolved}.log`);
@@ -1154,7 +1171,7 @@ export default class TestReporter implements Reporter {
           }
           const isScenarioArea2 = this.isScenarioAreaByKey(key);
           if (isScenarioArea2 && scenResolved) {
-            const stamp = process.env.KNA_LOG_STAMP || '';
+            const stamp = process.env[ENV_LOG_STAMP] || '';
             const candidate = stamp
               ? buildScenarioLogPath(stamp, scenResolved)
               : path.join('logs', 'latest', 'e2e', `${scenResolved}.log`);
@@ -1216,7 +1233,7 @@ export default class TestReporter implements Reporter {
           const absHeaderPath = this.areas.get(key)?.filePathAbs ?? filePath;
           const isScenarioArea = /[\\/]test[\\/]e2e[\\/]scenarios[\\/]/i.test(absHeaderPath);
           if (isScenarioArea && scenResolved) {
-            const stamp = process.env.KNA_LOG_STAMP || '';
+            const stamp = process.env[ENV_LOG_STAMP] || '';
             const candidate = stamp
               ? buildScenarioLogPath(stamp, scenResolved)
               : path.join('logs', 'latest', 'e2e', `${scenResolved}.log`);
@@ -1270,7 +1287,7 @@ export default class TestReporter implements Reporter {
           const absHeaderPath = this.areas.get(key)?.filePathAbs ?? filePath;
           const isScenarioArea = /[\\/]test[\\/]e2e[\\/]scenarios[\\/]/i.test(absHeaderPath);
           if (isScenarioArea && scenResolved) {
-            const stamp = process.env.KNA_LOG_STAMP || '';
+            const stamp = process.env[ENV_LOG_STAMP] || '';
             const candidate = stamp
               ? buildScenarioLogPath(stamp, scenResolved)
               : path.join('logs', 'latest', 'e2e', `${scenResolved}.log`);
@@ -1594,10 +1611,9 @@ export default class TestReporter implements Reporter {
   onFinished(_files: RunnerTestFile[]): void {
     // Ensure any remaining areas are closed in the preferred order
     const toPosix = (p: string) => p.replace(/\\/g, '/');
-    const isSuite = (p: string) => /test\/e2e\/suite\.test\.ts$/i.test(toPosix(p));
-    const isSchema = (p: string) =>
-      /test\/e2e\/schema\/prompt-map\.schema\.test\.ts$/i.test(toPosix(p));
-    const isScenario = (p: string) => /test\/e2e\/scenarios\/.+\/.+\.test\.ts$/i.test(toPosix(p));
+    const isSuite = (p: string) => SUITE_TEST_PATTERN.test(toPosix(p));
+    const isSchema = (p: string) => SCHEMA_TEST_PATTERN.test(toPosix(p));
+    const isScenario = (p: string) => SCENARIO_TEST_PATTERN.test(toPosix(p));
     const remaining = this.fileQueue.filter((p) => !this.closedAreas.has(p));
     // We need original absolute paths to print headers/urls
     const keyToAbs = (k: string) => this.areas.get(k)?.filePathAbs ?? k;

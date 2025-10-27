@@ -2,6 +2,11 @@
 import type { TestSpecification } from 'vitest/node';
 import { BaseSequencer } from 'vitest/node';
 import path from 'node:path';
+import {
+  SUITE_TEST_PATTERN,
+  SCHEMA_TEST_PATTERN,
+  SCENARIO_TEST_PATTERN,
+} from './components/constants.ts';
 
 export default class KnaSequencer extends BaseSequencer {
   async sort(files: TestSpecification[]): Promise<TestSpecification[]> {
@@ -18,11 +23,11 @@ export default class KnaSequencer extends BaseSequencer {
     const rank = (spec: TestSpecification) => {
       const p = toPosix(getPath(spec));
       // 1) Suite first
-      if (/(?:^|\/)test\/e2e\/suite\/suite\.test\.ts$/i.test(p)) return 0;
+      if (SUITE_TEST_PATTERN.test(p)) return 0;
       // 2) Schema next
-      if (/(?:^|\/)test\/e2e\/schema\/schema-validation\.test\.ts$/i.test(p)) return 1;
+      if (SCHEMA_TEST_PATTERN.test(p)) return 1;
       // 3) Scenario tests (e.g., local-only/*.test.ts)
-      if (/(?:^|\/)test\/e2e\/scenarios\/[^/]+\/[^/]+\.test\.ts$/i.test(p)) return 2;
+      if (SCENARIO_TEST_PATTERN.test(p)) return 2;
       // 4) Everything else
       return 3;
     };

@@ -6,6 +6,12 @@ import * as path from 'node:path';
 import { createCI } from '../../../suite/components/ci.ts';
 import { recordSuiteStep } from '../../../suite/components/area-detail.ts';
 import { withTempSchema } from '../../../suite/components/pg-suite.ts';
+import {
+  ENV_LOG_STAMP,
+  LOGS_DIR,
+  E2E_DIR,
+  SUITE_LOG_FILE,
+} from '../../../suite/components/constants.ts';
 // Emit steps via CI console for streaming; reporter will capture icon lines
 
 describe('Database Environment Setup', () => {
@@ -61,7 +67,7 @@ describe('Database Environment Setup', () => {
 
           // Explicit log link for reporter to pick up (absolute file URL)
           const absSentinel = path
-            .resolve('logs', String(process.env.KNA_LOG_STAMP || ''), 'e2e', 'suite-sentinel.log')
+            .resolve(LOGS_DIR, String(process.env[ENV_LOG_STAMP] || ''), E2E_DIR, SUITE_LOG_FILE)
             .replace(/\\/g, '/')
             .replace(/ /g, '%20');
           ci.write(`log: file:///${absSentinel}`);
