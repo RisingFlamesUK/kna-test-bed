@@ -11,14 +11,10 @@ export type SchemaConfigFile = {
   /** Optional default schema to use for all files (unless overridden per-file) */
   defaultSchema?: string;
   /**
-   * New required shape: list of test groups. Each group contains a human-readable
-   * testGroupName and a `tests` mapping of testName -> { pattern, schema }.
-   * This allows grouping related schema checks into logical groups.
+   * Test groups containing schema checks.
+   * Each group has a testGroupName and a tests mapping of testName -> { pattern, schema }.
    */
   schema: SchemaTestGroup[];
-
-  /** Backwards-compatible: list of file entries to validate (legacy) */
-  // files?: SchemaFileEntry[]; // Removed to enforce new manifest shape exclusively
 };
 
 /**

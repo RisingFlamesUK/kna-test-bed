@@ -4,14 +4,26 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.4.5] – 2025-11-10
+
 ### Added
 
 - **Hierarchical reporter with hierarchy-context routing**: Each CI emission now identifies its area/config/testGroup/test for accurate routing and dynamic Test Group headers:
   - New `HierarchyContext` interface in `suite/types/ci.ts` to track emission context
   - CI component encodes context as `[HIERARCHY:json]` prefix for reporter parsing
-  - Reporter extracts context from console logs for definitive routing (replaces content-based heuristics)
+  - Reporter (`vitest-reporter.ts`) extracts context from console logs for definitive routing (replaces content-based heuristics)
   - Test Group headers now appear immediately before each group's first output (not all at top)
   - Buffered lines preserve context for correct header placement when flushed
+- **Parallel schema test execution**: Schema validation tests now run concurrently via `it.concurrent()` blocks for ~20-25% performance improvement (15-17s vs. 18-20s):
+  - Individual `it.concurrent()` test for each file validation (16+ concurrent tests)
+  - Uses fast-glob (`fg.sync()`) for synchronous pattern expansion at test definition time
+  - Maintains deterministic file ordering via custom sequencer (Suite → Schema → Scenarios)
+  - Scenarios remain sequential (ordered dependencies + TTY conflicts)
+- **Deferred logging architecture**: Schema tests now write logs after all validations complete for clean, sequential output:
+  - Tests collect results in `_schema-detail.json` during parallel execution (no inline logging)
+  - Final test reads detail JSON and generates formatted log with perfect sequential numbering (1..N)
+  - Eliminates race conditions and log interleaving from concurrent execution
+  - Single source of truth: detail JSON drives both CI output and log files
 
 ### Changed
 
@@ -22,16 +34,22 @@ All notable changes to this project will be documented in this file.
 - **Canonical scenario identifier**: Removed legacy `scenarioName` fallbacks in favor of `testGroupName` as sole canonical identifier:
   - Updated scenario runner, scaffold/env/files assertions, and all type definitions
   - Scenario test configs (`test/e2e/scenarios/*/config/tests.json`) now use `testGroupName` exclusively
+- **Schema runner refactored for concurrency**: Major architectural changes to `test/e2e/schema/_runner/schema-runner.ts`:
+  - Changed from 1 sequential test with loop → 16+ individual concurrent tests
+  - `validateFile()` simplified to return only validation results (no inline logging)
+  - Pattern expansion moved to test definition time (synchronous)
+  - Log generation deferred until after all tests complete
+- **Vitest parallelism enabled**: Set `poolOptions.threads.singleThread: false` in `vitest.config.ts` to enable parallel test execution within files while maintaining file-level ordering via custom sequencer.
+- **ESLint configuration updated**: Added file-pattern exception for `test/e2e/**/_runner/*.ts` to disable `vitest/valid-title` rule (allows dynamic test titles from JSON config).
 
 ### Fixed
 
-- **Duplicate log URLs**: Removed duplicate emission in scenario runner by deleting "backstop" emission in finally block. Removed `emittedLogUrls` deduplication Set from reporter (no longer needed).
 - **Missing step output**: Suite and Schema tests now emit console output for all test steps via `ci.testStep()` calls. Previously only wrote to log files and detail JSON.
-- **Test Group header timing**: Headers now appear at correct time in all areas (Suite, Schema, Scenarios) immediately before each test group runs instead of all at area start.
 
 ### Removed
 
-- **Legacy scenario naming**: Deleted obsolete `test/e2e/scenarios/_runner/prompt-map.schema.test.ts` (functionality covered by main schema validation test)
+- **Removed unused helper**: Deleted `expandPattern()` async function from schema runner (no longer needed after refactoring to use synchronous glob expansion).
+- **Unused utility cleanup**: Deleted `suite/components/format.ts` (functions were duplicated inline in other files).
 
 ## [0.4.4] – 2025-10-27
 

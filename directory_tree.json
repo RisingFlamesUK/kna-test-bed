@@ -1,0 +1,675 @@
+{
+  "name": "kna-test-bed",
+  "type": "folder",
+  "children": [
+    {
+      "name": ".tmp",
+      "type": "folder",
+      "children": []
+    },
+    {
+      "name": "docs",
+      "type": "folder",
+      "children": [
+        {
+          "name": "components.md",
+          "type": "file"
+        },
+        {
+          "name": "design.md",
+          "type": "file"
+        },
+        {
+          "name": "planning",
+          "type": "folder",
+          "children": [
+            {
+              "name": "approach-running-order.md",
+              "type": "file"
+            },
+            {
+              "name": "example-running-order.md",
+              "type": "file"
+            },
+            {
+              "name": "resolver-spec.md",
+              "type": "file"
+            },
+            {
+              "name": "roadmap.md",
+              "type": "file"
+            }
+          ]
+        },
+        {
+          "name": "pre-release-testing.md",
+          "type": "file"
+        },
+        {
+          "name": "scenarios.md",
+          "type": "file"
+        }
+      ]
+    },
+    {
+      "name": "logs",
+      "type": "folder",
+      "children": [
+        {
+          "name": "<timestamp>",
+          "type": "folder",
+          "children": [
+            {
+              "name": "e2e",
+              "type": "folder",
+              "children": [
+                {
+                  "name": "_scenario-detail.json",
+                  "type": "file"
+                },
+                {
+                  "name": "_schema-detail.json",
+                  "type": "file"
+                },
+                {
+                  "name": "_suite-detail.json",
+                  "type": "file"
+                },
+                {
+                  "name": "bearer+microsoft-silent.log",
+                  "type": "file"
+                },
+                {
+                  "name": "local-only-answers.log",
+                  "type": "file"
+                },
+                {
+                  "name": "local-only-interactive.log",
+                  "type": "file"
+                },
+                {
+                  "name": "local-only-silent.log",
+                  "type": "file"
+                },
+                {
+                  "name": "local+google-silent.log",
+                  "type": "file"
+                },
+                {
+                  "name": "schema-validation.log",
+                  "type": "file"
+                },
+                {
+                  "name": "suite-sentinel.log",
+                  "type": "file"
+                }
+              ]
+            },
+            {
+              "name": "suite.log",
+              "type": "file"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "scripts",
+      "type": "folder",
+      "children": [
+        {
+          "name": "test-pre.mjs",
+          "type": "file"
+        }
+      ]
+    },
+    {
+      "name": "suite",
+      "type": "folder",
+      "children": [
+        {
+          "name": "components",
+          "type": "folder",
+          "children": [
+            {
+              "name": "area-detail.ts",
+              "type": "file"
+            },
+            {
+              "name": "area-recorder.ts",
+              "type": "file"
+            },
+            {
+              "name": "ci.ts",
+              "type": "file"
+            },
+            {
+              "name": "constants.ts",
+              "type": "file"
+            },
+            {
+              "name": "detail-io.ts",
+              "type": "file"
+            },
+            {
+              "name": "docker-suite.ts",
+              "type": "file"
+            },
+            {
+              "name": "logger.ts",
+              "type": "file"
+            },
+            {
+              "name": "pg-env.ts",
+              "type": "file"
+            },
+            {
+              "name": "pg-suite.ts",
+              "type": "file"
+            },
+            {
+              "name": "pre-release.ts",
+              "type": "file"
+            },
+            {
+              "name": "proc.ts",
+              "type": "file"
+            },
+            {
+              "name": "reporter-registry.ts",
+              "type": "file"
+            },
+            {
+              "name": "scenario-status.ts",
+              "type": "file"
+            },
+            {
+              "name": "test-area.ts",
+              "type": "file"
+            }
+          ]
+        },
+        {
+          "name": "types",
+          "type": "folder",
+          "children": [
+            {
+              "name": "ambient",
+              "type": "folder",
+              "children": [
+                {
+                  "name": "picomatch.d.ts",
+                  "type": "file"
+                },
+                {
+                  "name": "vitest-reporter-ambient.d.ts",
+                  "type": "file"
+                }
+              ]
+            },
+            {
+              "name": "ci.ts",
+              "type": "file"
+            },
+            {
+              "name": "fs-assert.ts",
+              "type": "file"
+            },
+            {
+              "name": "logger.ts",
+              "type": "file"
+            },
+            {
+              "name": "prompts.ts",
+              "type": "file"
+            },
+            {
+              "name": "scenario-runner.ts",
+              "type": "file"
+            },
+            {
+              "name": "scenarios.ts",
+              "type": "file"
+            },
+            {
+              "name": "severity.ts",
+              "type": "file"
+            },
+            {
+              "name": "ui.ts",
+              "type": "file"
+            }
+          ]
+        },
+        {
+          "name": "global-setup.ts",
+          "type": "file"
+        },
+        {
+          "name": "sequencer.ts",
+          "type": "file"
+        },
+        {
+          "name": "vitest-reporter.ts",
+          "type": "file"
+        }
+      ]
+    },
+    {
+      "name": "test",
+      "type": "folder",
+      "children": [
+        {
+          "name": "components",
+          "type": "folder",
+          "children": [
+            {
+              "name": "env-assert.ts",
+              "type": "file"
+            },
+            {
+              "name": "fs-assert.ts",
+              "type": "file"
+            },
+            {
+              "name": "interactive-driver.ts",
+              "type": "file"
+            },
+            {
+              "name": "scaffold-command-assert.ts",
+              "type": "file"
+            },
+            {
+              "name": "test-constants.ts",
+              "type": "file"
+            },
+            {
+              "name": "auth-assert.ts",
+              "type": "file"
+            },
+            {
+              "name": "env-merge.ts",
+              "type": "file"
+            },
+            {
+              "name": "http-assert.ts",
+              "type": "file"
+            },
+            {
+              "name": "pg-assert.ts",
+              "type": "file"
+            },
+            {
+              "name": "server-assert.ts",
+              "type": "file"
+            }
+          ]
+        },
+        {
+          "name": "e2e",
+          "type": "folder",
+          "children": [
+            {
+              "name": "scenarios",
+              "type": "folder",
+              "children": [
+                {
+                  "name": "_runner",
+                  "type": "folder",
+                  "children": [
+                    {
+                      "name": "scenario-runner.ts",
+                      "type": "file"
+                    },
+                    {
+                      "name": "types.ts",
+                      "type": "file"
+                    }
+                  ]
+                },
+                {
+                  "name": "bearer+microsoft",
+                  "type": "folder",
+                  "children": [
+                    {
+                      "name": ".real-env",
+                      "type": "folder",
+                      "children": [
+                        {
+                          "name": ".real.env",
+                          "type": "file"
+                        }
+                      ]
+                    },
+                    {
+                      "name": "config",
+                      "type": "folder",
+                      "children": [
+                        {
+                          "name": "answers.json",
+                          "type": "file"
+                        },
+                        {
+                          "name": "tests.json",
+                          "type": "file"
+                        }
+                      ]
+                    },
+                    {
+                      "name": "manifest",
+                      "type": "folder",
+                      "children": [
+                        {
+                          "name": "env.json",
+                          "type": "file"
+                        },
+                        {
+                          "name": "files.json",
+                          "type": "file"
+                        },
+                        {
+                          "name": "routes.json",
+                          "type": "file"
+                        }
+                      ]
+                    },
+                    {
+                      "name": "bearer+microsoft.test.ts",
+                      "type": "file"
+                    }
+                  ]
+                },
+                {
+                  "name": "local-only",
+                  "type": "folder",
+                  "children": [
+                    {
+                      "name": ".real-env",
+                      "type": "folder",
+                      "children": [
+                        {
+                          "name": ".real.env",
+                          "type": "file"
+                        }
+                      ]
+                    },
+                    {
+                      "name": "config",
+                      "type": "folder",
+                      "children": [
+                        {
+                          "name": "answers.json",
+                          "type": "file"
+                        },
+                        {
+                          "name": "tests.json",
+                          "type": "file"
+                        }
+                      ]
+                    },
+                    {
+                      "name": "manifest",
+                      "type": "folder",
+                      "children": [
+                        {
+                          "name": "env.json",
+                          "type": "file"
+                        },
+                        {
+                          "name": "files.json",
+                          "type": "file"
+                        },
+                        {
+                          "name": "routes.json",
+                          "type": "file"
+                        }
+                      ]
+                    },
+                    {
+                      "name": "pre-release-tests",
+                      "type": "folder",
+                      "children": [
+                        {
+                          "name": "x.y.z",
+                          "type": "folder",
+                          "children": [
+                            {
+                              "name": "config",
+                              "type": "folder",
+                              "children": [
+                                {
+                                  "name": "tests.json",
+                                  "type": "file"
+                                },
+                                {
+                                  "name": "answers.json",
+                                  "type": "file"
+                                }
+                              ]
+                            },
+                            {
+                              "name": "manifest",
+                              "type": "folder",
+                              "children": [
+                                {
+                                  "name": "env.json",
+                                  "type": "file"
+                                },
+                                {
+                                  "name": "files.json",
+                                  "type": "file"
+                                },
+                                {
+                                  "name": "routes.json",
+                                  "type": "file"
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "name": "local-only.test.ts",
+                      "type": "file"
+                    }
+                  ]
+                },
+                {
+                  "name": "local+google",
+                  "type": "folder",
+                  "children": [
+                    {
+                      "name": ".real-env",
+                      "type": "folder",
+                      "children": [
+                        {
+                          "name": ".real.env",
+                          "type": "file"
+                        }
+                      ]
+                    },
+                    {
+                      "name": "config",
+                      "type": "folder",
+                      "children": [
+                        {
+                          "name": "answers.json",
+                          "type": "file"
+                        },
+                        {
+                          "name": "tests.json",
+                          "type": "file"
+                        }
+                      ]
+                    },
+                    {
+                      "name": "manifest",
+                      "type": "folder",
+                      "children": [
+                        {
+                          "name": "env.json",
+                          "type": "file"
+                        },
+                        {
+                          "name": "files.json",
+                          "type": "file"
+                        },
+                        {
+                          "name": "routes.json",
+                          "type": "file"
+                        }
+                      ]
+                    },
+                    {
+                      "name": "local+google.test.ts",
+                      "type": "file"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "name": "schema",
+              "type": "folder",
+              "children": [
+                {
+                  "name": "_runner",
+                  "type": "folder",
+                  "children": [
+                    {
+                      "name": "schema-runner.ts",
+                      "type": "file"
+                    },
+                    {
+                      "name": "types.ts",
+                      "type": "file"
+                    }
+                  ]
+                },
+                {
+                  "name": "config",
+                  "type": "folder",
+                  "children": [
+                    {
+                      "name": "answers.schema.json",
+                      "type": "file"
+                    },
+                    {
+                      "name": "env-manifest.schema.json",
+                      "type": "file"
+                    },
+                    {
+                      "name": "files-manifest.schema.json",
+                      "type": "file"
+                    },
+                    {
+                      "name": "prompt-map.schema.json",
+                      "type": "file"
+                    },
+                    {
+                      "name": "routes-manifest.schema.json",
+                      "type": "file"
+                    },
+                    {
+                      "name": "scenario-tests.schema.json",
+                      "type": "file"
+                    },
+                    {
+                      "name": "tests.json",
+                      "type": "file"
+                    }
+                  ]
+                },
+                {
+                  "name": "fixtures",
+                  "type": "folder",
+                  "children": [
+                    {
+                      "name": "prompt-map-valid.json",
+                      "type": "file"
+                    }
+                  ]
+                },
+                {
+                  "name": "pre-release-tests",
+                  "type": "folder",
+                  "children": [
+                    {
+                      "name": "x.y.z",
+                      "type": "folder",
+                      "children": [
+                        {
+                          "name": "config",
+                          "type": "folder",
+                          "children": [
+                            {
+                              "name": "tests.json",
+                              "type": "file"
+                            }
+                          ]
+                        },
+                        {
+                          "name": "fixtures",
+                          "type": "folder",
+                          "children": [
+                            {
+                              "name": "*-valid.json",
+                              "type": "file"
+                            },
+                            {
+                              "name": "*-invalid-*.json",
+                              "type": "file"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "name": "schema-validation.test.ts",
+                  "type": "file"
+                }
+              ]
+            },
+            {
+              "name": "suite",
+              "type": "folder",
+              "children": [
+                {
+                  "name": "suite.test.ts",
+                  "type": "file"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "global.d.ts",
+          "type": "file"
+        }
+      ]
+    },
+    {
+      "name": "CHANGELOG.md",
+      "type": "file"
+    },
+    {
+      "name": "package.json",
+      "type": "file"
+    },
+    {
+      "name": "README.md",
+      "type": "file"
+    },
+    {
+      "name": "tsconfig.json",
+      "type": "file"
+    },
+    {
+      "name": "vitest.config.ts",
+      "type": "file"
+    }
+  ]
+}

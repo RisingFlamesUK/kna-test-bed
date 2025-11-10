@@ -53,7 +53,9 @@
   - Supports glob patterns to validate multiple files in a single test entry
   - Per-file schema override capability with optional `defaultSchema` fallback
   - Validates all test configuration files: prompt-map, scenario-tests, env-manifest, files-manifest, routes-manifest, answers
-  - Records individual file validation results in `_schema-detail.json` for reporter streaming
+  - **Parallel execution**: Creates individual `it.concurrent()` blocks for each file validation (16+ concurrent tests)
+  - **Deferred logging**: Tests collect results in `_schema-detail.json` during execution; final test reads detail JSON and generates formatted log with sequential numbering
+  - **Performance**: ~20-25% speedup (15-17s vs. 18-20s) with parallel execution while maintaining clean, deterministic log output
 - **Test helpers**: `test/components/*`
   - `scaffold-command-assert.ts`, `interactive-driver.ts`, `env-assert.ts`, `fs-assert.ts`
   - future: `server-assert.ts`
@@ -64,13 +66,16 @@
   - `logBox` for generic boxed sections (used by annotated `.env` dumps).
 
 - **Reporter & streaming**
-  - The custom reporter streams in a deterministic order: **Suite → Schema → Scenarios**.
+  - The custom reporter (`vitest-reporter.ts`) streams in a deterministic order: **Suite → Schema → Scenarios**.
+  - **Hierarchy-context routing**: Each CI emission includes optional hierarchy context (area/config/testGroup/test) encoded as `[HIERARCHY:json]` prefix for accurate routing.
   - Suite/Schema step lines are read from JSON artifacts (`e2e/_suite-detail.json`, `e2e/_schema-detail.json`).
   - Scenario step severities come from `_scenario-detail.json` (single source of truth).
   - Each group prints: bullet → step lines → summary → log link → footer, without batching or pauses.
+  - **Dynamic Test Group headers**: Headers appear immediately before each test group's first output (not all at area start), driven by hierarchy context.
   - Scenario area header prints both the test file and the active `tests.json` as absolute `file:///` URLs (pre-release variant preferred when `PRE_RELEASE_VERSION` is set and present).
   - All log pointers are absolute `file:///` URLs.
   - Skip is included in counts. Taskless console noise is ignored to prevent bleed-through.
+  - **Parallelism model**: Schema tests run concurrently within the Schema section; Scenarios remain sequential (ordered dependencies + TTY conflicts). File ordering (Suite → Schema → Scenarios) maintained via custom sequencer.
 
 ---
 
@@ -110,7 +115,13 @@ kna-test-bed
 ├── docs
 │   ├── components.md                         # components reference & API
 │   ├── design.md                             # design and architecture (this file)
-│   └── scenarios.md                          # scenario runner and manifests
+│   ├── pre-release-testing.md                # pre-release test conventions
+│   ├── scenarios.md                          # scenario runner and manifests
+│   └── planning                              # planning documents
+│       ├── approach-running-order.md
+│       ├── example-running-order.md
+│       ├── resolver-spec.md
+│       └── roadmap.md
 ├── logs
 │   └── <timestamp>
 │       ├── e2e                               # e2e logs per test run
@@ -131,23 +142,23 @@ kna-test-bed
 │   ├── components
 │   │   ├── area-detail.ts                    # append-only JSON steps (Suite/Schema)
 │   │   ├── area-recorder.ts                  # facade for recording steps
-│   │   ├── ci.ts                             # CI console rendering (icons, boxes, footers)
+│   │   ├── ci.ts                             # CI console rendering (icons, boxes, footers, hierarchy context)
 │   │   ├── constants.ts                      # shared labels and temp paths
 │   │   ├── detail-io.ts                      # JSON artifact path helpers
 │   │   ├── docker-suite.ts                   # Docker bring-up/cleanup helpers
-│   │   ├── format.ts                         # pure formatting utilities
 │   │   ├── logger.ts                         # structured step logging + box helpers
 │   │   ├── pg-env.ts                         # SUITE_PG_* env read/publish helpers
 │   │   ├── pg-suite.ts                       # Postgres container and schema helpers
 │   │   ├── pre-release.ts                    # pre-release version detection (env/npm args)
 │   │   ├── proc.ts                           # boxed subprocess execution/streaming
+│   │   ├── reporter-registry.ts              # reporter-related types and helpers
 │   │   ├── scenario-status.ts                # per-scenario severity store (scaffold/env/files)
 │   │   └── test-area.ts                      # per-area counts/state for reporter
 │   ├── types
 │   │   ├── ambient
 │   │   │   ├── picomatch.d.ts                # shim types for picomatch if needed
 │   │   │   └── vitest-reporter-ambient.d.ts  # maps 'vitest/reporter' Reporter type
-│   │   ├── ci.ts                             # UI/icon type definitions
+│   │   ├── ci.ts                             # UI/icon type definitions, HierarchyContext interface
 │   │   ├── fs-assert.ts                      # filesystem assertion types
 │   │   ├── logger.ts                         # Logger type
 │   │   ├── prompts.ts                        # interactive prompt types
@@ -156,18 +167,20 @@ kna-test-bed
 │   │   ├── severity.ts                       # severity enums/types
 │   │   └── ui.ts                             # UI icon mapping types
 │   ├── global-setup.ts                       # suite bootstrap: Docker+Postgres, publish env
-│   ├── sequencer.ts                          # (optional) custom test file ordering
-│   └── vitest-reporter.ts                    # custom reporter: deterministic JSON-backed streaming
+│   ├── sequencer.ts                          # custom test file ordering (Suite → Schema → Scenarios)
+│   ├── vitest-reporter.ts                    # custom hierarchical reporter with context routing
+│   └── vitest.config.ts                      # Vitest v3 configuration
 ├── test
 │   ├── components                            # assertion helpers used across tests
-│   │   ├── auth-assert.ts                    # testing auth routes (planned)
 │   │   ├── env-assert.ts                     # testing .env
-│   │   ├── env-merge.ts                      # inject env with real settings (planned)
 │   │   ├── fs-assert.ts                      # testing files as expected
-│   │   ├── http-assert.ts                    # testing routes (not auth) (planned)
 │   │   ├── interactive-driver.ts             # programmatic TTY driver for interactive flows
-│   │   ├── pg-assert.ts                      # testing pg (planned)
 │   │   ├── scaffold-command-assert.ts        # testing CLI command to scaffold
+│   │   ├── test-constants.ts                 # test timeout constants
+│   │   ├── auth-assert.ts                    # testing auth routes (planned)
+│   │   ├── env-merge.ts                      # inject env with real settings (planned)
+│   │   ├── http-assert.ts                    # testing routes (not auth) (planned)
+│   │   ├── pg-assert.ts                      # testing pg (planned)
 │   │   └── server-assert.ts                  # testing scaffolded app server (planned)
 │   ├── e2e
 │   │   ├── scenarios
@@ -331,13 +344,15 @@ Interactive scenarios are driven by **`test/components/interactive-driver.ts`**,
 
 ### Priority Order (v0.4.5–v0.7.0)
 
-**v0.4.5 - Parallelism & Performance** (if CI output integrity maintained)
+**v0.4.5 - Parallelism & Performance** ✅ **COMPLETED**
 
-- Enable schema test parallelism (safe - order within Schema section doesn't matter)
-- Enable scenario parallelism (only if cross-area output bleeding can be prevented)
-- Maintain deterministic area ordering: Suite → Schema → Scenarios
-- Critical: Ensure reporter doesn't interleave output from different test areas
-- Interactive tests remain sequential (TTY conflicts)
+- ✅ Enabled schema test parallelism with `it.concurrent()` blocks (16+ concurrent tests)
+- ✅ Achieved ~20-25% performance improvement (15-17s vs. 18-20s)
+- ✅ Implemented deferred logging pattern: tests write to detail JSON, final test generates sequential log
+- ✅ Maintained deterministic area ordering: Suite → Schema → Scenarios
+- ✅ Ensured clean output with no interleaving via deferred log generation
+- ✅ Scenarios remain sequential (ordered dependencies + TTY conflicts)
+- ❌ Scenario parallelism deferred (would require more complex output coordination)
 
 **v0.5.0 - Server Infrastructure**
 

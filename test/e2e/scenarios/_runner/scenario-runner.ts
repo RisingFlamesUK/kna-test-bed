@@ -80,7 +80,7 @@ function defineScenario(entry: ScenarioEntry, ctx: ResolveCtx, configKey: string
           test: title,
         };
 
-        const ci = createCI(hierarchyContext);
+        const ci = createCI();
 
         let appDir = '';
         let cleanup: (() => Promise<void>) | undefined;

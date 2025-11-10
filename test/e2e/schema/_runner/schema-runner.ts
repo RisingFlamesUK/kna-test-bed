@@ -45,7 +45,6 @@ function _getSchemaForEntry(entry: SchemaFileEntry, defaultSchema?: string): str
 async function validateFile(
   filePath: string,
   schemaPath: string,
-  _hierarchyContext: { area: string; config: string; testGroup: string; test: string },
 ): Promise<{
   passed: boolean;
   errorCount: number;
@@ -155,7 +154,7 @@ export async function runSchemaTestsFromFile(configPath: string) {
     test: testName,
   };
 
-  const ci = createCI(hierarchyContext);
+  const ci = createCI();
 
   describe(config.describe ?? 'schema validation', () => {
     // Expect the new `schema` shape: an array of test groups
@@ -223,7 +222,7 @@ export async function runSchemaTestsFromFile(configPath: string) {
           it.concurrent(
             fileDisplay,
             async () => {
-              const result = await validateFile(file, schemaPath, hierarchyContext);
+              const result = await validateFile(file, schemaPath);
 
               // Record step and emit CI event (detail JSON collection)
               recordSchemaStep(result.ciStatus === 'ok' ? 'ok' : 'fail', result.ciMessage);

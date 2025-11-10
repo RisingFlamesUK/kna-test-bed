@@ -27,7 +27,7 @@ describe('Database Environment Setup', () => {
     };
 
     // Create CI with hierarchy context for proper output routing
-    const ci = createCI(hierarchyContext);
+    const ci = createCI();
     // reporter computes and prints durations; we don't need timing here
 
     // Step 1: quick preflight so we fail clearly when PG isn’t available

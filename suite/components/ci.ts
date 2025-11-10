@@ -36,16 +36,9 @@ function _makeRule(openGlyph: '┌' | '└', label: string, width: number): stri
 /**
  * Create a new CI instance for test output.
  *
- * @param _hierarchyContext Optional hierarchy context (currently unused, kept for compatibility)
- *
  * All output goes to console.log which the reporter intercepts.
  */
-export function createCI(_hierarchyContext?: {
-  area?: string;
-  config?: string;
-  testGroup?: string;
-  test?: string;
-}): CI {
+export function createCI(): CI {
   const emit = (content: string, context?: HierarchyContext) => {
     // Encode hierarchy context as a prefix that the reporter can parse
     if (context) {

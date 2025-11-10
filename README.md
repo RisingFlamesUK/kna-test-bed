@@ -116,6 +116,25 @@ We use `--spec=draft2020` for AJV.
 
 ---
 
+## New in v0.4.5
+
+- **Hierarchical reporter with hierarchy-context routing**: Each CI emission can now identify its area/config/testGroup/test for accurate routing:
+  - New `HierarchyContext` interface for tracking emission context
+  - Reporter extracts context from `[HIERARCHY:json]` prefix for definitive routing
+  - Dynamic Test Group headers appear immediately before each group (not all at top)
+  - Centralized CI formatting in `ci.ts` component for consistency
+- **Parallel schema test execution**: Schema validation tests now run concurrently via `it.concurrent()` blocks:
+  - ~20-25% performance improvement (15-17s vs. 18-20s)
+  - Individual concurrent test for each file validation (16+ tests)
+  - Scenarios remain sequential (ordered dependencies + TTY conflicts)
+- **Deferred logging architecture**: Clean, sequential log output despite parallel execution:
+  - Tests collect results in `_schema-detail.json` during parallel execution
+  - Final test reads detail JSON and generates formatted log with perfect sequential numbering (1..N)
+  - Eliminates race conditions and log interleaving
+- **Canonical scenario identifier**: `testGroupName` is now the sole identifier (removed legacy `scenarioName` fallbacks)
+- **Code cleanup**: Removed unused code including `expandPattern()` helper function and `suite/components/format.ts`
+- **ESLint configuration**: Added file-pattern exception for test runners to allow dynamic test titles from JSON config
+
 ## New in v0.4.4
 
 - **Constants refactoring**: Centralized all hardcoded strings and timeout values into two dedicated files:

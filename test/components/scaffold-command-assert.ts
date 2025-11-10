@@ -115,7 +115,7 @@ export async function assertScaffoldCommand(opts: ScaffoldCmdOpts): Promise<Scaf
   log.write(`cwd=${process.cwd()}`);
 
   // Emit CI progress
-  const ci = createCI(opts.hierarchyContext);
+  const ci = createCI();
   ci.testStep(`⏳ Installing dependencies - this can take 5+ minutes...`, 'ok');
   ci.testStep(`💡 Running npm install to simulate real user experience`, 'ok');
 

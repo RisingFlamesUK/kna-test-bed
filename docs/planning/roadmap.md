@@ -8,11 +8,11 @@
 
 | Version    | Focus Area       | Components                                              | Status  | Target  |
 | ---------- | ---------------- | ------------------------------------------------------- | ------- | ------- |
-| **v0.4.5** | Performance      | Parallelism (schema tests, scenarios)                   | Planned | Q1 2026 |
-| **v0.5.0** | Server Lifecycle | `env-merge.ts`, `server-assert.ts`                      | Planned | Q1 2026 |
-| **v0.6.0** | HTTP & Auth      | `http-assert.ts`, `auth-assert.ts`, `session-assert.ts` | Planned | Q2 2026 |
-| **v0.7.0** | Database         | `pg-assert.ts`                                          | Planned | Q2 2026 |
-| **v1.0.0** | Stable Release   | All features complete, documentation polished           | Planned | Q3 2026 |
+| **v0.4.5** | Performance      | Parallelism (schema tests, scenarios)                   | Planned | Q4 2025 |
+| **v0.5.0** | Server Lifecycle | `env-merge.ts`, `server-assert.ts`                      | Planned | Q4 2025 |
+| **v0.6.0** | HTTP & Auth      | `http-assert.ts`, `auth-assert.ts`, `session-assert.ts` | Planned | Q4 2025 |
+| **v0.7.0** | Database         | `pg-assert.ts`                                          | Planned | Q4 2025 |
+| **v1.0.0** | Stable Release   | All features complete, documentation polished           | Planned | Q1 2026 |
 
 ---
 

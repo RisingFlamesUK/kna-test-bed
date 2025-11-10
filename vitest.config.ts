@@ -15,13 +15,7 @@ export default defineConfig({
       },
     },
     include: ['test/e2e/**/*.test.ts'],
-    exclude: [
-      '**/node_modules/**',
-      '**/dist/**',
-      '**/.{idea,git,cache,output,temp}/**',
-      // Exclude moved/placeholder schema test to prevent a duplicate Schema CI block
-      'test/e2e/scenarios/_runner/prompt-map.schema.test.ts',
-    ],
+    exclude: ['**/node_modules/**', '**/dist/**', '**/.{idea,git,cache,output,temp}/**'],
 
     // Deterministic file order: Suite -> Schema -> Scenarios -> other
     sequence: {
@@ -43,7 +37,7 @@ export default defineConfig({
     // disableConsoleIntercept: true,
 
     // Use our test reporter only
-    reporters: ['./suite/vitest-reporter-hierarchical.ts'], // Output configuration - let our reporter handle all output
+    reporters: ['./suite/vitest-reporter.ts'], // Output configuration - let our reporter handle all output
     silent: true,
     logHeapUsage: false,
 
