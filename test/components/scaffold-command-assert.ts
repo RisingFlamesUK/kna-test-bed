@@ -17,7 +17,7 @@ import { recordScenarioSeverityFromEnv } from '../../suite/components/scenario-s
 import { createCI } from '../../suite/components/ci.ts';
 
 export type ScaffoldCmdOpts = {
-  scenarioName: string; // e.g. "local-only"
+  testGroupName: string; // e.g. "local-only"
   flags: string[]; // raw CLI flags (ignored when answersFile is provided)
   answersFile?: string; // path to answers JSON (when provided, flags are ignored)
   keepArtifacts?: boolean; // default false
@@ -31,6 +31,12 @@ export type ScaffoldCmdOpts = {
     | { kind: 'linked'; spec: string } // default: { kind: "linked", spec: "kickstart-node-app" }
     | { kind: 'node'; entry: string } // local dev entry file, e.g. "./packages/cli/bin/cli.js"
     | { kind: 'npx'; spec: string }; // e.g. "kickstart-node-app@latest" or "kickstart-node-app@1.2.3"
+  hierarchyContext?: {
+    area?: string;
+    config?: string;
+    testGroup?: string;
+    test?: string;
+  };
 };
 
 export type ScaffoldResult = {
@@ -41,12 +47,12 @@ export type ScaffoldResult = {
 };
 
 // Unique folder per run; safe and readable
-function generateAppName(scenarioName: string): string {
-  return `${makeLogStamp()}-${sanitizeLogName(scenarioName)}`;
+function generateAppName(testGroupName: string): string {
+  return `${makeLogStamp()}-${sanitizeLogName(testGroupName)}`;
 }
 
 export async function assertScaffoldCommand(opts: ScaffoldCmdOpts): Promise<ScaffoldResult> {
-  const log = opts.log ?? scenarioLoggerFromEnv(opts.scenarioName);
+  const log = opts.log ?? scenarioLoggerFromEnv(opts.testGroupName);
 
   // 1) Resolve temp root and ensure it exists
   const tmpRoot = KNA_TMP_DIR
@@ -55,7 +61,7 @@ export async function assertScaffoldCommand(opts: ScaffoldCmdOpts): Promise<Scaf
   await fs.ensureDir(tmpRoot);
 
   // 2) Determine app dir (must not exist)
-  const appName = generateAppName(opts.scenarioName);
+  const appName = generateAppName(opts.testGroupName);
   const appDir = path.join(tmpRoot, appName);
 
   log.step(`Scaffold: preparing temp app directory`);
@@ -63,7 +69,7 @@ export async function assertScaffoldCommand(opts: ScaffoldCmdOpts): Promise<Scaf
   log.write(`appDir=${appDir}`);
 
   if (await fs.pathExists(appDir)) {
-    recordScenarioSeverityFromEnv(opts.scenarioName, 'fail', {
+    recordScenarioSeverityFromEnv(opts.testGroupName, 'fail', {
       step: 'scaffold',
       meta: { note: 'target path exists' },
     });
@@ -109,7 +115,7 @@ export async function assertScaffoldCommand(opts: ScaffoldCmdOpts): Promise<Scaf
   log.write(`cwd=${process.cwd()}`);
 
   // Emit CI progress
-  const ci = createCI();
+  const ci = createCI(opts.hierarchyContext);
   ci.testStep(`⏳ Installing dependencies - this can take 5+ minutes...`, 'ok');
   ci.testStep(`💡 Running npm install to simulate real user experience`, 'ok');
 
@@ -152,11 +158,11 @@ export async function assertScaffoldCommand(opts: ScaffoldCmdOpts): Promise<Scaf
         argsWrapWidth: 100,
       });
     }
-    recordScenarioSeverityFromEnv(opts.scenarioName, 'ok', { step: 'scaffold' });
+    recordScenarioSeverityFromEnv(opts.testGroupName, 'ok', { step: 'scaffold' });
     log.pass(`Scaffold completed successfully`);
   } catch (e: any) {
     const msg = e?.message ?? String(e);
-    recordScenarioSeverityFromEnv(opts.scenarioName, 'fail', { step: 'scaffold' });
+    recordScenarioSeverityFromEnv(opts.testGroupName, 'fail', { step: 'scaffold' });
     log.fail(`Scaffold failed: ${msg}`);
     throw e;
   }
@@ -164,7 +170,7 @@ export async function assertScaffoldCommand(opts: ScaffoldCmdOpts): Promise<Scaf
   // 6) Postcondition: ensure appDir now exists
   const created = await fs.pathExists(appDir);
   if (!created) {
-    recordScenarioSeverityFromEnv(opts.scenarioName, 'fail', { step: 'scaffold' });
+    recordScenarioSeverityFromEnv(opts.testGroupName, 'fail', { step: 'scaffold' });
     log.fail(`Scaffold reported success but path not found: ${appDir}`);
     throw new Error(`Scaffold did not produce ${appDir}`);
   }

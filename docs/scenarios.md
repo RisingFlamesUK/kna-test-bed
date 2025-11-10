@@ -47,7 +47,7 @@ The per-scenario test list. Example:
   "scenarios": [
     {
       "it": "silent mode: scaffolds app without errors",
-      "scenarioName": "local-only-silent",
+      "testGroupName": "local-only-silent",
       "tests": {
         "assertScaffold": { "flags": ["--silent", "--passport", "local"] },
         "assertEnv": { "manifest": "env.json" },
@@ -58,7 +58,7 @@ The per-scenario test list. Example:
     },
     {
       "it": "answers-file mode: scaffolds app without error",
-      "scenarioName": "local-only-answers",
+      "testGroupName": "local-only-answers",
       "tests": {
         "assertScaffold": {
           "flags": [],
@@ -72,7 +72,7 @@ The per-scenario test list. Example:
     },
     {
       "it": "interactive mode: scaffolds app without errors (prompts)",
-      "scenarioName": "local-only-interactive",
+      "testGroupName": "local-only-interactive",
       "tests": {
         "assertScaffold": {
           "flags": [],
@@ -103,7 +103,7 @@ Scenario entry shape:
 ```ts
 type ScenarioEntry = {
   it?: string;
-  scenarioName: string;
+  testGroupName: string;
   tests: {
     assertScaffold?: {
       flags?: string[];
@@ -436,7 +436,7 @@ Reporter extras in CI:
   "scenarios": [
     {
       "it": "silent mode: scaffolds app without errors",
-      "scenarioName": "local-only-silent",
+      "testGroupName": "local-only-silent",
       "tests": {
         "assertScaffold": { "flags": ["--silent", "--passport", "local"] },
         "assertEnv": { "manifest": "env.json" },

@@ -29,13 +29,13 @@
       "description": "Array of scenario test definitions",
       "items": {
         "type": "object",
-        "required": ["scenarioName", "tests"],
+        "required": ["testGroupName", "tests"],
         "properties": {
           "it": {
             "type": "string",
-            "description": "Test description (optional, defaults to scenarioName)"
+            "description": "Test description (optional, defaults to testGroupName)"
           },
-          "scenarioName": {
+          "testGroupName": {
             "type": "string",
             "description": "Unique name for this scenario"
           },

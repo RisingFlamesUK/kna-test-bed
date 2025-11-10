@@ -43,9 +43,7 @@ export default defineConfig({
     // disableConsoleIntercept: true,
 
     // Use our test reporter only
-    reporters: ['./suite/vitest-reporter.ts'],
-
-    // Output configuration - let our reporter handle all output
+    reporters: ['./suite/vitest-reporter-hierarchical.ts'], // Output configuration - let our reporter handle all output
     silent: true,
     logHeapUsage: false,
 

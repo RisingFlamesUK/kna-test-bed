@@ -179,7 +179,7 @@ kna-test-bed
 │   │   │   │   │   └── .real.env             # real .env settings to be injected
 │   │   │   │   ├── config
 │   │   │   │   │   ├── answers.json          # answers for answers-file scenario
-│   │   │   │   │   └── tests.json            # scenario mapping (title → scenarioName)
+│   │   │   │   │   └── tests.json            # scenario mapping (title → testGroupName)
 │   │   │   │   ├── manifest
 │   │   │   │   │   ├── env.json              # expected env
 │   │   │   │   │   ├── files.json            # expected files

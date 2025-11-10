@@ -17,7 +17,8 @@ export type ScenarioConfigFile = {
 
 export type ScenarioEntry = {
   it?: string;
-  scenarioName: string;
+  /** Name used as the canonical identifier for the scenario (used in running-order/stages and logs) */
+  testGroupName: string;
 
   /**
    * Per-scenario tests configuration.

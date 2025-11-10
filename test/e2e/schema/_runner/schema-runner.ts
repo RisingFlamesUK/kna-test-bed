@@ -30,7 +30,7 @@ function getRelativePath(filePath: string): string {
 /**
  * Resolve schema path for a file entry
  */
-function getSchemaForEntry(entry: SchemaFileEntry, defaultSchema?: string): string {
+function _getSchemaForEntry(entry: SchemaFileEntry, defaultSchema?: string): string {
   const schema = entry.schema || defaultSchema;
   if (!schema) {
     throw new Error(`No schema specified for pattern: ${entry.pattern} and no defaultSchema set`);
@@ -69,6 +69,8 @@ async function validateFile(
   filePath: string,
   schemaPath: string,
   log: ReturnType<typeof scenarioLoggerFromEnv>,
+  ci: ReturnType<typeof createCI>,
+  hierarchyContext: { area: string; config: string; testGroup: string; test: string },
 ): Promise<{ passed: boolean; errorCount: number; details?: string }> {
   const relativePath = getRelativePath(filePath);
 
@@ -96,6 +98,7 @@ async function validateFile(
     log.write(`errors: 0`);
     log.pass(`${filePath}: OK`);
     recordSchemaStep('ok', `${relativePath}: OK`);
+    ci.testStep(`${relativePath}: OK`, 'ok', undefined, hierarchyContext);
 
     return { passed: true, errorCount: 0 };
   } catch (e: any) {
@@ -149,6 +152,7 @@ async function validateFile(
 
       log.fail(`${filePath}: FAILED`);
       recordSchemaStep('fail', `${relativePath}: FAILED`);
+      ci.testStep(`${relativePath}: FAILED`, 'fail', undefined, hierarchyContext);
 
       return { passed: false, errorCount, details: detailLines };
     } else {
@@ -157,6 +161,7 @@ async function validateFile(
       log.write(`errors: unknown`);
       log.fail(`${filePath}: FAILED - ${errStr}`);
       recordSchemaStep('fail', `${relativePath}: FAILED`);
+      ci.testStep(`${relativePath}: FAILED`, 'fail', undefined, hierarchyContext);
 
       return { passed: false, errorCount: 1, details: errStr };
     }
@@ -172,44 +177,75 @@ export async function runSchemaTestsFromFile(configPath: string) {
   const config: SchemaConfigFile = JSON.parse(raw);
 
   const log = scenarioLoggerFromEnv('schema-validation');
-  const ci = createCI();
+  const testGroupName = config.describe ?? 'schema validation';
+  const testName = 'validated all configured files against their schemas';
 
-  // Tell reporter to show config file in header
-  console.log(`/* CI: AreaFile ${abs} */`);
+  const hierarchyContext = {
+    area: 'schema',
+    config: 'main',
+    testGroup: testGroupName,
+    test: testName,
+  };
+
+  const ci = createCI(hierarchyContext);
 
   // eslint-disable-next-line vitest/valid-title
-  describe(config.describe ?? 'schema validation', () => {
-    // eslint-disable-next-line vitest/expect-expect
+  describe(testGroupName, () => {
+    // eslint-disable-next-line vitest/expect-expect, vitest/valid-title
     it(
-      'validated all configured files against their schemas',
+      testName,
       async () => {
         let totalFailed = 0;
 
-        if (config.files.length === 0) {
-          log.step('No files configured for validation');
-          log.write('⚠️ No files configured');
-          recordSchemaStep('skip', 'No files configured');
+        // Expect the new `schema` shape: an array of test groups
+        const groups = config.schema;
+
+        if (!Array.isArray(groups) || groups.length === 0) {
+          log.step('No schema test groups configured for validation');
+          log.write('⚠️ No schema test groups configured');
+          recordSchemaStep('skip', 'No schema test groups configured');
           await (log as any)?.close?.();
           return;
         }
 
-        // Process each file entry
-        for (const entry of config.files) {
-          const schema = getSchemaForEntry(entry, config.defaultSchema);
-          const files = await expandPattern(entry.pattern);
+        // Iterate groups and validate each named test inside
+        for (const group of groups) {
+          const groupName = group.testGroupName ?? group.it ?? '(group)';
+          const testsObj = group.tests ?? {};
+          for (const [testName, testEntry] of Object.entries(testsObj)) {
+            const displayName = `${groupName} :: ${testName}`;
+            const pattern = (testEntry as any).pattern as string | undefined;
+            const schemaPath =
+              ((testEntry as any).schema as string | undefined) || config.defaultSchema;
 
-          if (files.length === 0) {
-            log.step(`Pattern matched no files: ${entry.pattern}`);
-            log.write('⚠️ No files matched');
-            recordSchemaStep('skip', `${entry.name}: no files matched`);
-            continue;
-          }
+            if (!pattern) {
+              log.step(`No pattern specified for test: ${displayName}`);
+              log.write('⚠️ No pattern for test');
+              recordSchemaStep('skip', `${displayName}: no pattern configured`);
+              continue;
+            }
+            if (!schemaPath) {
+              log.step(`No schema specified for test: ${displayName}`);
+              log.write('⚠️ No schema for test');
+              recordSchemaStep('skip', `${displayName}: no schema configured`);
+              continue;
+            }
 
-          // Validate each matched file
-          for (const file of files) {
-            const result = await validateFile(file, schema, log);
-            if (!result.passed) {
-              totalFailed++;
+            const files = await expandPattern(pattern);
+
+            if (files.length === 0) {
+              log.step(`Pattern matched no files: ${pattern}`);
+              log.write('⚠️ No files matched');
+              recordSchemaStep('skip', `${displayName}: no files matched`);
+              continue;
+            }
+
+            // Validate each matched file
+            for (const file of files) {
+              const result = await validateFile(file, schemaPath, log, ci, hierarchyContext);
+              if (!result.passed) {
+                totalFailed++;
+              }
             }
           }
         }
@@ -223,7 +259,7 @@ export async function runSchemaTestsFromFile(configPath: string) {
         )
           .replace(/\\/g, '/')
           .replace(/ /g, '%20');
-        ci.write(`log: file:///${absLog}`);
+        ci.write(`  - log: file:///${absLog}`, undefined, hierarchyContext);
 
         await (log as any)?.close?.();
 

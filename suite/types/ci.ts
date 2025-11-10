@@ -1,12 +1,19 @@
 // suite/types/ci.ts
 import type { Sev } from './severity.ts';
 
+export interface HierarchyContext {
+  area?: string;
+  config?: string;
+  testGroup?: string;
+  test?: string;
+}
+
 export interface CI {
   /** Start a new test area with title and file path */
   testAreaStart(title: string, filePath: string, indent?: string | number): void;
 
-  /** Output a test step with optional severity */
-  testStep(line: string, status?: Sev, indent?: string | number): void;
+  /** Output a test step with optional severity and hierarchy context */
+  testStep(line: string, status?: Sev, indent?: string | number, context?: HierarchyContext): void;
 
   /** Special handler for suite steps */
   suiteStep(line: string): void;
@@ -46,7 +53,7 @@ export interface CI {
 
   /** Standard status output methods */
   step(title: string, details?: string, indent?: string | number): void;
-  write(line: string, indent?: string | number): void;
+  write(line: string, indent?: string | number, context?: HierarchyContext): void;
   pass(msg?: string, indent?: string | number): void;
   warn(msg?: string, indent?: string | number): void;
   fail(msg: string, indent?: string | number): void;

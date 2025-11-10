@@ -16,5 +16,5 @@ export type AssertFilesOptions = {
   logger: Logger; // suite logger
   /** Optional label/path for logging (so runner doesn't need a separate step) */
   manifestLabel?: string; // printed in the header for clarity
-  scenarioName?: string; // used for per-scenario severity sentinel
+  testGroupName?: string; // used for per-scenario severity sentinel
 };

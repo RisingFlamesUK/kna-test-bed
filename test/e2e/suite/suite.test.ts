@@ -17,7 +17,17 @@ import {
 describe('Database Environment Setup', () => {
   it('should connect to Postgres and handle per-test schemas', async () => {
     const log = scenarioLoggerFromEnv('suite-sentinel');
-    const ci = createCI();
+
+    // Hierarchy context for all CI emissions in this test
+    const hierarchyContext = {
+      area: 'suite',
+      config: 'none',
+      testGroup: 'Database Environment Setup',
+      test: 'should connect to Postgres and handle per-test schemas',
+    };
+
+    // Create CI with hierarchy context for proper output routing
+    const ci = createCI(hierarchyContext);
     // reporter computes and prints durations; we don't need timing here
 
     // Step 1: quick preflight so we fail clearly when PG isn’t available
@@ -49,6 +59,7 @@ describe('Database Environment Setup', () => {
           log.pass(`Shared DB ready: ${schema}`);
           // Record step for reporter JSON-backed streaming
           recordSuiteStep('ok', `Shared DB ready: ${schema}`);
+          ci.testStep(`Shared DB ready: ${schema}`, 'ok', undefined, hierarchyContext);
 
           log.step('Running SELECT 1');
           const c = await connect();
@@ -56,6 +67,7 @@ describe('Database Environment Setup', () => {
           expect(r.rows[0].one).toBe(1);
           log.pass('SELECT 1 succeeded');
           recordSuiteStep('ok', 'SELECT 1 succeeded');
+          ci.testStep('SELECT 1 succeeded', 'ok', undefined, hierarchyContext);
 
           log.step('Testing schema round-trip');
           await c.query(
@@ -64,13 +76,14 @@ describe('Database Environment Setup', () => {
           const got = await c.query('SELECT COUNT(*)::int AS n FROM demo_t;');
           expect(got.rows[0].n).toBe(2);
           recordSuiteStep('ok', 'Schema round-trip (create/insert/select): OK');
+          ci.testStep('Schema round-trip: OK', 'ok', undefined, hierarchyContext);
 
           // Explicit log link for reporter to pick up (absolute file URL)
           const absSentinel = path
             .resolve(LOGS_DIR, String(process.env[ENV_LOG_STAMP] || ''), E2E_DIR, SUITE_LOG_FILE)
             .replace(/\\/g, '/')
             .replace(/ /g, '%20');
-          ci.write(`log: file:///${absSentinel}`);
+          ci.write(`  - log: file:///${absSentinel}`, undefined, hierarchyContext);
 
           log.pass('Schema round-trip (create/insert/select) succeeded');
 

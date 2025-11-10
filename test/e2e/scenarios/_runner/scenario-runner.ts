@@ -42,6 +42,10 @@ export async function runScenariosFromFile(configPath: string, opts?: { callerDi
 
   const promptMap = await loadPromptMap(cfg.promptMapPath, configDir);
 
+  // Extract config key from path (same logic as hierarchy collector)
+  // For scenarios: test/e2e/scenarios/local-only/... -> local-only
+  const configKey = path.basename(scenarioRootFromConfig);
+
   const ctx: ResolveCtx = {
     configDir,
     configFileAbs: abs,
@@ -53,188 +57,193 @@ export async function runScenariosFromFile(configPath: string, opts?: { callerDi
     promptMap,
   };
 
-  // eslint-disable-next-line vitest/valid-title
-  describe(cfg.describe ?? 'scenario suite', () => {
-    for (const entry of cfg.scenarios) {
-      defineScenario(entry, ctx);
-    }
-  });
+  // Each scenario gets its own describe block using testGroupName
+  for (const entry of cfg.scenarios) {
+    defineScenario(entry, ctx, configKey);
+  }
 }
 
-function defineScenario(entry: ScenarioEntry, ctx: ResolveCtx) {
-  const title = entry.it ?? entry.scenarioName;
+function defineScenario(entry: ScenarioEntry, ctx: ResolveCtx, configKey: string) {
+  const testGroupName = entry.testGroupName;
+  const title = entry.it ?? entry.testGroupName;
 
-  it(
+  // eslint-disable-next-line vitest/valid-title
+  describe(testGroupName as string, () => {
     // eslint-disable-next-line vitest/valid-title
-    title,
+    it(
+      title,
+      async () => {
+        const log = scenarioLoggerFromEnv(testGroupName as string);
 
-    async () => {
-      const log = scenarioLoggerFromEnv(entry.scenarioName);
-      const ci = createCI();
-      // Tell reporter to show config file in header and emit group bullet
-      console.log(`/* CI: AreaFile ${ctx.configFileAbs} */`);
-      ci.boxLine(`• Testing ${entry.scenarioName}...`);
+        const hierarchyContext = {
+          area: 'scenarios',
+          config: configKey,
+          testGroup: testGroupName as string,
+          test: title,
+        };
 
-      let appDir = '';
-      let cleanup: (() => Promise<void>) | undefined;
+        const ci = createCI(hierarchyContext);
 
-      // 1) Scaffold (silent / answers / interactive)
-      if (entry.tests.assertScaffold) {
-        const { flags = [], answersFile, interactive } = entry.tests.assertScaffold;
+        let appDir = '';
+        let cleanup: (() => Promise<void>) | undefined;
 
-        const interactiveOpts: { prompts: Prompt[] } | undefined = interactive?.prompts
-          ? { prompts: coercePrompts(interactive.prompts) }
-          : interactive?.include
-            ? { prompts: includeToPrompts(interactive.include, ctx.promptMap) }
+        // 1) Scaffold (silent / answers / interactive)
+        if (entry.tests.assertScaffold) {
+          const { flags = [], answersFile, interactive } = entry.tests.assertScaffold;
+
+          const interactiveOpts: { prompts: Prompt[] } | undefined = interactive?.prompts
+            ? { prompts: coercePrompts(interactive.prompts) }
+            : interactive?.include
+              ? { prompts: includeToPrompts(interactive.include, ctx.promptMap) }
+              : undefined;
+
+          const resolvedAnswers = answersFile
+            ? resolveWithBasesVerbose(answersFile, orderAnswersBases(ctx), {
+                kind: 'answersFile',
+                log,
+              })
             : undefined;
 
-        const resolvedAnswers = answersFile
-          ? resolveWithBasesVerbose(answersFile, orderAnswersBases(ctx), {
-              kind: 'answersFile',
-              log,
-            })
-          : undefined;
-
-        let result;
-        try {
-          result = await assertScaffoldCommand({
-            scenarioName: entry.scenarioName,
-            flags,
-            answersFile: resolvedAnswers,
-            log,
-            interactive: interactiveOpts,
-          });
-          ci.testStep('scaffold: OK', 'ok');
-          // Record scaffold OK in scenario detail for reporter
-          recordScenarioSeverityFromEnv(entry.scenarioName, 'ok', { step: 'scaffold' });
-        } catch (e) {
-          ci.testStep('scaffold: FAILED', 'fail');
-          // Record scaffold FAIL in scenario detail for reporter
-          recordScenarioSeverityFromEnv(entry.scenarioName, 'fail', { step: 'scaffold' });
-          throw e;
-        }
-
-        appDir = result.appDir;
-        cleanup = result.cleanup;
-      } else {
-        throw new Error('tests.assertScaffold is required for each scenario');
-      }
-
-      try {
-        expect(Boolean(appDir)).toBe(true);
-
-        // 2a) Env assertions (ALWAYS run on the UNMERGED .env to verify scaffolder output)
-        let envSeverity: 'ok' | 'warn' | 'fail' | null = null;
-        if (entry.tests.assertEnv?.manifest) {
-          const manifestPath = resolveWithBasesVerbose(
-            entry.tests.assertEnv.manifest,
-            orderManifestBases(ctx),
-            { kind: 'manifest', log },
-          );
-
-          const envFile = path.join(appDir, '.env');
-          log.step(`Env: validate .env against manifest`);
-          log.write(`envFile=${envFile}`);
-          log.write(`manifest=${manifestPath}`);
-
+          let result;
           try {
-            const sev = await assertEnvMatches({
-              appDir,
-              manifestPath,
+            result = await assertScaffoldCommand({
+              testGroupName: testGroupName,
+              flags,
+              answersFile: resolvedAnswers,
               log,
-              scenarioName: entry.scenarioName,
+              interactive: interactiveOpts,
+              hierarchyContext,
             });
-            envSeverity = sev;
-            ci.testStep(`env manifest checks: ${sev.toUpperCase()}`, sev as any);
-          } catch {
-            // env-assert throws on FAIL — record and continue to files step
-            ci.testStep('env manifest checks: FAIL', 'fail');
-            envSeverity = 'fail';
-            // Do not rethrow; we want to continue with file assertions
-          }
-        }
-
-        // 2b) Filesystem assertions (required/forbidden paths via manifest)
-        if (entry.tests.assertFiles?.manifest) {
-          const filesManifestPath = resolveWithBasesVerbose(
-            entry.tests.assertFiles.manifest,
-            orderManifestBases(ctx),
-            { kind: 'manifest', log },
-          );
-
-          // Pre-check manifest existence to style missing-file case consistently
-          if (!fs.existsSync(filesManifestPath)) {
-            log.step('Files: validate files against manifest');
-            log.write(`cwd=${appDir}`);
-            log.write(`manifest=${filesManifestPath}`);
-            log.write('Manifest file not found:');
-            log.boxStart('Missing file');
-            log.boxLine(`• ${filesManifestPath}`);
-            log.boxEnd('1 file');
-            if ('fail' in log && typeof log.fail === 'function') log.fail('fs-assert: FAIL');
-            else log.write('fs-assert: FAIL');
-            ci.testStep('files manifest checks: FAIL', 'fail');
-            // Record severity at files step with explanatory note for suite summary
-            recordScenarioSeverityFromEnv(entry.scenarioName, 'fail', {
-              step: 'files',
-              meta: { note: 'files manifest not found' },
-            });
-            throw new Error('files manifest missing');
-          }
-
-          try {
-            await assertFiles({
-              cwd: appDir,
-              manifest: JSON.parse(await readFile(filesManifestPath, 'utf8')),
-              manifestLabel: filesManifestPath,
-              scenarioName: entry.scenarioName,
-              logger: log,
-            });
-            ci.testStep('files manifest checks: OK', 'ok');
+            ci.testStep('scaffold: OK', 'ok', undefined, hierarchyContext);
+            // Record scaffold OK in scenario detail for reporter
+            recordScenarioSeverityFromEnv(testGroupName as string, 'ok', { step: 'scaffold' });
           } catch (e) {
-            ci.testStep('files manifest checks: FAILED', 'fail');
+            ci.testStep('scaffold: FAILED', 'fail', undefined, hierarchyContext);
+            // Record scaffold FAIL in scenario detail for reporter
+            recordScenarioSeverityFromEnv(testGroupName as string, 'fail', { step: 'scaffold' });
             throw e;
           }
+
+          appDir = result.appDir;
+          cleanup = result.cleanup;
+        } else {
+          throw new Error('tests.assertScaffold is required for each scenario');
         }
 
-        // 3) Merge step — intentionally NOT IMPLEMENTED yet (placeholder)
-        if (entry.tests.mergeEnv?.env) {
-          log.step(
-            `Merge: mergeEnv present in config (env="${entry.tests.mergeEnv.env}") — skipping (not implemented by runner)`,
-          );
-          // Mark mergeEnv as explicitly skipped (↩️)
-          ci.testStep('mergeEnv: skipped (not implemented)', 'skip');
-        }
+        try {
+          expect(Boolean(appDir)).toBe(true);
 
-        // Emit an explicit per-scenario log line now (primary emission)
-        {
-          const stamp = process.env.KNA_LOG_STAMP || '';
-          const candidate = stamp
-            ? buildScenarioLogPath(stamp, entry.scenarioName)
-            : path.join('logs', 'latest', 'e2e', `${entry.scenarioName}.log`);
-          const absLog = path.resolve(candidate).replace(/\\/g, '/').replace(/ /g, '%20');
-          ci.testStep(`log: file:///${absLog}`, 'ok');
-        }
+          // 2a) Env assertions (ALWAYS run on the UNMERGED .env to verify scaffolder output)
+          let envSeverity: 'ok' | 'warn' | 'fail' | null = null;
+          if (entry.tests.assertEnv?.manifest) {
+            const manifestPath = resolveWithBasesVerbose(
+              entry.tests.assertEnv.manifest,
+              orderManifestBases(ctx),
+              { kind: 'manifest', log },
+            );
 
-        // After both steps, fail the scenario if any step ended up with FAIL severity
-        if (envSeverity === 'fail') {
-          throw new Error('scenario failed due to env FAIL');
+            const envFile = path.join(appDir, '.env');
+            log.step(`Env: validate .env against manifest`);
+            log.write(`envFile=${envFile}`);
+            log.write(`manifest=${manifestPath}`);
+
+            try {
+              const sev = await assertEnvMatches({
+                appDir,
+                manifestPath,
+                log,
+                testGroupName: testGroupName as string,
+              });
+              envSeverity = sev;
+              ci.testStep(
+                `env manifest checks: ${sev.toUpperCase()}`,
+                sev as any,
+                undefined,
+                hierarchyContext,
+              );
+            } catch {
+              // env-assert throws on FAIL — record and continue to files step
+              ci.testStep('env manifest checks: FAIL', 'fail', undefined, hierarchyContext);
+              envSeverity = 'fail';
+              // Do not rethrow; we want to continue with file assertions
+            }
+          }
+
+          // 2b) Filesystem assertions (required/forbidden paths via manifest)
+          if (entry.tests.assertFiles?.manifest) {
+            const filesManifestPath = resolveWithBasesVerbose(
+              entry.tests.assertFiles.manifest,
+              orderManifestBases(ctx),
+              { kind: 'manifest', log },
+            );
+
+            // Pre-check manifest existence to style missing-file case consistently
+            if (!fs.existsSync(filesManifestPath)) {
+              log.step('Files: validate files against manifest');
+              log.write(`cwd=${appDir}`);
+              log.write(`manifest=${filesManifestPath}`);
+              log.write('Manifest file not found:');
+              log.boxStart('Missing file');
+              log.boxLine(`• ${filesManifestPath}`);
+              log.boxEnd('1 file');
+              if ('fail' in log && typeof log.fail === 'function') log.fail('fs-assert: FAIL');
+              else log.write('fs-assert: FAIL');
+              ci.testStep('files manifest checks: FAIL', 'fail', undefined, hierarchyContext);
+              // Record severity at files step with explanatory note for suite summary
+              recordScenarioSeverityFromEnv(testGroupName as string, 'fail', {
+                step: 'files',
+                meta: { note: 'files manifest not found' },
+              });
+              throw new Error('files manifest missing');
+            }
+
+            try {
+              await assertFiles({
+                cwd: appDir,
+                manifest: JSON.parse(await readFile(filesManifestPath, 'utf8')),
+                manifestLabel: filesManifestPath,
+                testGroupName: testGroupName as string,
+                logger: log,
+              });
+              ci.testStep('files manifest checks: OK', 'ok', undefined, hierarchyContext);
+            } catch (e) {
+              ci.testStep('files manifest checks: FAILED', 'fail', undefined, hierarchyContext);
+              throw e;
+            }
+          }
+
+          // 3) Merge step — intentionally NOT IMPLEMENTED yet (placeholder)
+          if (entry.tests.mergeEnv?.env) {
+            log.step(
+              `Merge: mergeEnv present in config (env="${entry.tests.mergeEnv.env}") — skipping (not implemented by runner)`,
+            );
+            // Mark mergeEnv as explicitly skipped (↩️)
+            ci.testStep('mergeEnv: skipped (not implemented)', 'skip', undefined, hierarchyContext);
+          }
+
+          // Emit an explicit per-scenario log line now (primary emission)
+          {
+            const stamp = process.env.KNA_LOG_STAMP || '';
+            const candidate = stamp
+              ? buildScenarioLogPath(stamp, testGroupName as string)
+              : path.join('logs', 'latest', 'e2e', `${testGroupName}.log`);
+            const absLog = path.resolve(candidate).replace(/\\/g, '/').replace(/ /g, '%20');
+            ci.write(`  - log: file:///${absLog}`, undefined, hierarchyContext);
+          }
+
+          // After both steps, fail the scenario if any step ended up with FAIL severity
+          if (envSeverity === 'fail') {
+            throw new Error('scenario failed due to env FAIL');
+          }
+        } finally {
+          // Cleanup resources
+          if (entry.tests.cleanup && cleanup) await cleanup();
+          if ((log as any)?.close) await (log as any).close();
         }
-      } finally {
-        // Backstop: ensure a log line is present if it wasn't already
-        // (Reporter will handle duplicates gracefully by printing in order.)
-        const stamp = process.env.KNA_LOG_STAMP || '';
-        const candidate = stamp
-          ? buildScenarioLogPath(stamp, entry.scenarioName)
-          : path.join('logs', 'latest', 'e2e', `${entry.scenarioName}.log`);
-        const absLog = path.resolve(candidate).replace(/\\/g, '/').replace(/ /g, '%20');
-        ci.testStep(`log: file:///${absLog}`, 'ok');
-        if (entry.tests.cleanup && cleanup) await cleanup();
-        if ((log as any)?.close) await (log as any).close();
-      }
-    },
-    SCENARIO_TEST_TIMEOUT_MS, // 3 minutes - allow time for interactive prompts
-  );
+      },
+      SCENARIO_TEST_TIMEOUT_MS, // 3 minutes - allow time for interactive prompts
+    );
+  }); // Close describe block
 }
 
 /** ----- Prompt map loader / include → prompts ----- */

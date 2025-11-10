@@ -1,10 +1,8 @@
 // suite/components/ci.ts
-import { type CI } from '../types/ci.ts';
+import { type CI, type HierarchyContext } from '../types/ci.ts';
 import type { Sev } from '../types/severity.ts';
 import { ICON } from '../types/ui.ts';
 import { TestArea } from './test-area.ts';
-
-/** Icons to use for severity levels in test output (centralized) */
 
 /** Default width for box output */
 const DEFAULT_BOX_WIDTH = 78;
@@ -37,9 +35,27 @@ function _makeRule(openGlyph: '┌' | '└', label: string, width: number): stri
 
 /**
  * Create a new CI instance for test output.
- * Follows the same pattern as logger.ts for consistency.
+ *
+ * @param _hierarchyContext Optional hierarchy context (currently unused, kept for compatibility)
+ *
+ * All output goes to console.log which the reporter intercepts.
  */
-export function createCI(): CI {
+export function createCI(_hierarchyContext?: {
+  area?: string;
+  config?: string;
+  testGroup?: string;
+  test?: string;
+}): CI {
+  const emit = (content: string, context?: HierarchyContext) => {
+    // Encode hierarchy context as a prefix that the reporter can parse
+    if (context) {
+      const contextJson = JSON.stringify(context);
+      console.log(`[HIERARCHY:${contextJson}]${content}`);
+    } else {
+      console.log(content);
+    }
+  };
+
   const indent = '  ';
 
   /** Active test areas by file path */
@@ -70,9 +86,17 @@ export function createCI(): CI {
       getOrCreateTestArea(filePath, title, areaIndent);
     },
 
-    testStep(line: string, status: Sev = 'ok', stepIndent?: string | number) {
+    testStep(
+      line: string,
+      status: Sev = 'ok',
+      stepIndent?: string | number,
+      context?: HierarchyContext,
+    ) {
       const ind = resolveIndent(stepIndent, indent);
-      console.log(`${ind}${ICON[status]} ${line}`);
+      // Format as: - <icon> <text> for consistent bullet formatting
+      // Remove any existing bullet prefix from line before formatting
+      const cleanLine = line.replace(/^-\s*/, '');
+      emit(`${ind}- ${ICON[status]} ${cleanLine}`, context);
     },
 
     testAreaEnd(
@@ -99,8 +123,8 @@ export function createCI(): CI {
     boxStart(title: string, opts?: { width?: number; indent?: string | number }) {
       const ind = resolveIndent(opts?.indent, indent);
       const width = opts?.width ?? DEFAULT_BOX_WIDTH;
-      console.log('');
-      console.log(
+      emit('');
+      emit(
         `${ind}${BOX.TOP_LEFT}${BOX.HORIZONTAL} ${title} ${BOX.HORIZONTAL.repeat(Math.max(0, width - title.length - 4))}`,
       );
     },
@@ -109,45 +133,46 @@ export function createCI(): CI {
       const ind = resolveIndent(opts?.indent, indent);
       // Shift leading dash content by two spaces without affecting the box border
       const shifted = line.startsWith('- ') ? `  ${line}` : line;
-      console.log(`${ind}${BOX.VERTICAL} ${shifted}`);
+      emit(`${ind}${BOX.VERTICAL} ${shifted}`);
     },
 
     boxEnd(label: string, opts?: { width?: number; indent?: string | number; suffix?: string }) {
       const ind = resolveIndent(opts?.indent, indent);
       const suffix = opts?.suffix ?? '';
       const width = opts?.width ?? DEFAULT_BOX_WIDTH;
-      console.log(
+      emit(
         `${ind}${BOX.BOTTOM_LEFT}${BOX.HORIZONTAL} ${label}${suffix} ${BOX.HORIZONTAL.repeat(Math.max(0, width - label.length - suffix.length - 4))}`,
       );
     },
 
     step(title: string, details?: string, stepIndent?: string | number) {
       const ind = resolveIndent(stepIndent, indent);
-      console.log(`${ind}${title}`);
-      if (details) console.log(`${ind}${details}`);
+      emit(`${ind}${title}`);
+      if (details) emit(`${ind}${details}`);
     },
 
-    write(line: string, textIndent?: string | number) {
+    write(line: string, textIndent?: string | number, context?: HierarchyContext) {
       const ind = resolveIndent(textIndent, indent);
-      console.log(`${ind}${line}`);
+      emit(`${ind}${line}`, context);
     },
 
     pass(msg = 'PASS', statusIndent?: string | number) {
       const ind = resolveIndent(statusIndent, indent);
-      console.log(`${ind}✅ ${msg}`);
+      emit(`${ind}✅ ${msg}`);
     },
 
     warn(msg = 'WARN', statusIndent?: string | number) {
       const ind = resolveIndent(statusIndent, indent);
-      console.log(`${ind}⚠️ ${msg}`);
+      emit(`${ind}⚠️ ${msg}`);
     },
 
     fail(msg: string, statusIndent?: string | number) {
       const ind = resolveIndent(statusIndent, indent);
-      console.log(`${ind}❌ ${msg}`);
+      emit(`${ind}❌ ${msg}`);
     },
 
     close() {
+      // No cleanup needed with direct routing
       return Promise.resolve();
     },
 

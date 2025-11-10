@@ -154,7 +154,7 @@ Copy and modify the production config as a starting point:
   "tests": [
     {
       "title": "local-only (silent) [pre-release 0.4.3]",
-      "scenarioName": "local-only",
+      "testGroupName": "local-only",
       "generatorFlags": "--silent --yes",
       "keepArtifacts": false
     }

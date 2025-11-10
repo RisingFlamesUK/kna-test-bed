@@ -107,7 +107,7 @@ export async function assertEnvMatches(opts: {
   manifestPath: string;
   log?: Logger;
   /** For scenario-level severity aggregation */
-  scenarioName?: string;
+  testGroupName?: string;
 }): Promise<'ok' | 'warn' | 'fail'> {
   const { appDir, manifestPath, log } = opts;
 
@@ -116,7 +116,7 @@ export async function assertEnvMatches(opts: {
     // Message before final status; style with a box for readability
     log?.write(`.env not found:`);
     logBoxCount(log, 'Missing file', [`• ${envFile}`], '1 file');
-    recordScenarioSeverityFromEnv(opts.scenarioName ?? 'unknown', 'fail', {
+    recordScenarioSeverityFromEnv(opts.testGroupName ?? 'unknown', 'fail', {
       step: 'env',
       meta: { note: '.env file not found' },
     });
@@ -130,7 +130,7 @@ export async function assertEnvMatches(opts: {
     // Message before final status; style with a box for readability
     log?.write(`Manifest file not found:`);
     logBoxCount(log, 'Missing file', [`• ${manifestPath}`], '1 file');
-    recordScenarioSeverityFromEnv(opts.scenarioName ?? 'unknown', 'fail', {
+    recordScenarioSeverityFromEnv(opts.testGroupName ?? 'unknown', 'fail', {
       step: 'env',
       meta: { note: 'env manifest not found' },
     });
@@ -321,7 +321,7 @@ export async function assertEnvMatches(opts: {
     else if (expectFailures.length > 0)
       note = `value expectation failures: ${expectFailures.length}`;
 
-    recordScenarioSeverityFromEnv(opts.scenarioName ?? 'unknown', 'fail', {
+    recordScenarioSeverityFromEnv(opts.testGroupName ?? 'unknown', 'fail', {
       step: 'env',
       meta: {
         missingCount: requiredMissingCount + optionalMissingCount,
@@ -333,7 +333,7 @@ export async function assertEnvMatches(opts: {
     throw new Error('env-assert: required/optional checks failed');
   }
   if (isWarn) {
-    recordScenarioSeverityFromEnv(opts.scenarioName ?? 'unknown', 'warn', {
+    recordScenarioSeverityFromEnv(opts.testGroupName ?? 'unknown', 'warn', {
       step: 'env',
       meta: { unexpectedCount },
     });
@@ -342,7 +342,7 @@ export async function assertEnvMatches(opts: {
     else log?.write('env-assert: WARN');
     return 'warn';
   }
-  recordScenarioSeverityFromEnv(opts.scenarioName ?? 'unknown', 'ok', { step: 'env' });
+  recordScenarioSeverityFromEnv(opts.testGroupName ?? 'unknown', 'ok', { step: 'env' });
   log?.pass('env-assert: OK');
   return 'ok';
 }

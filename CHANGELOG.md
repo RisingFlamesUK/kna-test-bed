@@ -2,6 +2,37 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Added
+
+- **Hierarchical reporter with hierarchy-context routing**: Each CI emission now identifies its area/config/testGroup/test for accurate routing and dynamic Test Group headers:
+  - New `HierarchyContext` interface in `suite/types/ci.ts` to track emission context
+  - CI component encodes context as `[HIERARCHY:json]` prefix for reporter parsing
+  - Reporter extracts context from console logs for definitive routing (replaces content-based heuristics)
+  - Test Group headers now appear immediately before each group's first output (not all at top)
+  - Buffered lines preserve context for correct header placement when flushed
+
+### Changed
+
+- **Centralized CI formatting**: Moved all output formatting to CI component for consistency across Suite, Schema, and Scenarios:
+  - `ci.testStep()` now auto-formats as `- <icon> <text>` with consistent bullet prefixes
+  - Removed transform logic from reporter (no longer modifies console output)
+  - Log URLs changed from `ci.testStep()` with 'ok' status to `ci.write()` for informational display (no status icon)
+- **Canonical scenario identifier**: Removed legacy `scenarioName` fallbacks in favor of `testGroupName` as sole canonical identifier:
+  - Updated scenario runner, scaffold/env/files assertions, and all type definitions
+  - Scenario test configs (`test/e2e/scenarios/*/config/tests.json`) now use `testGroupName` exclusively
+
+### Fixed
+
+- **Duplicate log URLs**: Removed duplicate emission in scenario runner by deleting "backstop" emission in finally block. Removed `emittedLogUrls` deduplication Set from reporter (no longer needed).
+- **Missing step output**: Suite and Schema tests now emit console output for all test steps via `ci.testStep()` calls. Previously only wrote to log files and detail JSON.
+- **Test Group header timing**: Headers now appear at correct time in all areas (Suite, Schema, Scenarios) immediately before each test group runs instead of all at area start.
+
+### Removed
+
+- **Legacy scenario naming**: Deleted obsolete `test/e2e/scenarios/_runner/prompt-map.schema.test.ts` (functionality covered by main schema validation test)
+
 ## [0.4.4] – 2025-10-27
 
 ### Changed

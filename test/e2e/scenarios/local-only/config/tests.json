@@ -6,7 +6,7 @@
   "scenarios": [
     {
       "it": "silent mode: scaffolds app without errors",
-      "scenarioName": "local-only-silent",
+      "testGroupName": "local-only-silent",
       "tests": {
         "assertScaffold": {
           "flags": ["--silent", "--passport", "local"]
@@ -19,7 +19,7 @@
     },
     {
       "it": "answers-file mode: scaffolds app without error",
-      "scenarioName": "local-only-answers",
+      "testGroupName": "local-only-answers",
       "tests": {
         "assertScaffold": {
           "flags": [],
@@ -33,7 +33,7 @@
     },
     {
       "it": "interactive mode: scaffolds app without errors (prompts)",
-      "scenarioName": "local-only-interactive",
+      "testGroupName": "local-only-interactive",
       "tests": {
         "assertScaffold": {
           "flags": [],

@@ -86,7 +86,7 @@ Consumes runner events; writes to `suite.log`; reads/writes JSON detail artifact
 `path`, `url`, `suite/components/logger.ts`, `suite/components/detail-io.ts`, `suite/components/ci.ts`, `suite/components/constants.ts`
 
 **Behavior & details**  
-Prints group bullets, then step lines as they appear in JSON, then a summary + immediate log link + footer. Scenario areas also render the active `tests.json` link under the header. De-duplicates log pointers and closes areas promptly to avoid trailing pauses. Pre-release mapping ensures `it` → `scenarioName` is resolved from the preferred config when `PRE_RELEASE_VERSION` is set.
+Prints group bullets, then step lines as they appear in JSON, then a summary + immediate log link + footer. Scenario areas also render the active `tests.json` link under the header. De-duplicates log pointers and closes areas promptly to avoid trailing pauses. Pre-release mapping ensures `it` → `testGroupName` is resolved from the preferred config when `PRE_RELEASE_VERSION` is set.
 
 **Error behavior**  
 Never throws; drops lines on hard failures.
@@ -557,7 +557,7 @@ Record per-scenario per-step severity into the JSON detail artifact consumed by 
 | ----------- | ------------------------------------------------------------------------------------------------------------- |
 | Steps       | `scaffold`, `env`, `files`                                                                                    |
 | Severities  | `ok`, `warn`, `fail` (worst-of merge per step; skip is handled by the reporter via Vitest, not recorded here) |
-| Store shape | `{ [scenarioName]: { [step]: { severity, meta? } } }`                                                         |
+| Store shape | `{ [testGroupName]: { [step]: { severity, meta? } } }`                                                        |
 
 **Exports**
 
@@ -851,7 +851,7 @@ Run the Kickstart CLI to a **temp dir** and capture a boxed transcript. Supports
 export type Prompt = import('./interactive-driver.ts').Prompt;
 
 export type ScaffoldCmdOpts = {
-  scenarioName: string;
+  testGroupName: string;
   flags?: string[];
   answersFile?: string;
   interactive?: { prompts?: Prompt[] };
@@ -1041,7 +1041,7 @@ export async function assertEnvMatches(opts: {
   appDir: string;
   manifestPath: string;
   log?: import('../../suite/components/logger.ts').Logger;
-  scenarioName?: string;
+  testGroupName?: string;
 }): Promise<'ok' | 'warn' | 'fail'>;
 ```
 
@@ -1085,12 +1085,12 @@ Types for JSON-driven scenarios and prompt-map.
 
 **At a glance**
 
-| Type                 | Purpose                                           |
-| -------------------- | ------------------------------------------------- |
-| `ScenarioConfigFile` | Top-level config + base paths + scenarios         |
-| `ScenarioEntry`      | A single scenario (`it`, `scenarioName`, `tests`) |
-| `AssertScaffoldSpec` | Flags/answers/interactive spec                    |
-| `PromptMap`          | Map `include` → concrete prompts                  |
+| Type                 | Purpose                                            |
+| -------------------- | -------------------------------------------------- |
+| `ScenarioConfigFile` | Top-level config + base paths + scenarios          |
+| `ScenarioEntry`      | A single scenario (`it`, `testGroupName`, `tests`) |
+| `AssertScaffoldSpec` | Flags/answers/interactive spec                     |
+| `PromptMap`          | Map `include` → concrete prompts                   |
 
 **Exports**
 
@@ -1106,7 +1106,7 @@ export type ScenarioConfigFile = {
 
 export type ScenarioEntry = {
   it?: string;
-  scenarioName: string;
+  testGroupName: string;
   tests: {
     assertScaffold?: AssertScaffoldSpec;
     assertEnv?: {

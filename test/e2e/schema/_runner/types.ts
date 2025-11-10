@@ -10,9 +10,15 @@ export type SchemaConfigFile = {
 
   /** Optional default schema to use for all files (unless overridden per-file) */
   defaultSchema?: string;
+  /**
+   * New required shape: list of test groups. Each group contains a human-readable
+   * testGroupName and a `tests` mapping of testName -> { pattern, schema }.
+   * This allows grouping related schema checks into logical groups.
+   */
+  schema: SchemaTestGroup[];
 
-  /** List of file entries to validate */
-  files: SchemaFileEntry[];
+  /** Backwards-compatible: list of file entries to validate (legacy) */
+  // files?: SchemaFileEntry[]; // Removed to enforce new manifest shape exclusively
 };
 
 /**
@@ -27,4 +33,14 @@ export type SchemaFileEntry = {
 
   /** Optional schema override for this file/pattern (falls back to defaultSchema) */
   schema?: string;
+};
+
+/** New test group shape */
+export type SchemaTestGroup = {
+  /** Optional 'it' description for the group */
+  it?: string;
+  /** Logical test group name (used for grouping in the reporter) */
+  testGroupName: string;
+  /** Mapping of test name -> pattern/schema pair */
+  tests: Record<string, { pattern: string; schema?: string }>;
 };
