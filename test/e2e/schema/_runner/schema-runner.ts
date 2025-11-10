@@ -177,8 +177,8 @@ export async function runSchemaTestsFromFile(configPath: string) {
   const config: SchemaConfigFile = JSON.parse(raw);
 
   const log = scenarioLoggerFromEnv('schema-validation');
-  const testGroupName = config.describe ?? 'schema validation';
-  const testName = 'validated all configured files against their schemas';
+  const testGroupName: string = config.describe ?? 'schema validation';
+  const testName = 'validate all configured files against their schemas';
 
   const hierarchyContext = {
     area: 'schema',
@@ -189,11 +189,10 @@ export async function runSchemaTestsFromFile(configPath: string) {
 
   const ci = createCI(hierarchyContext);
 
-  // eslint-disable-next-line vitest/valid-title
-  describe(testGroupName, () => {
-    // eslint-disable-next-line vitest/expect-expect, vitest/valid-title
+  describe(config.describe ?? 'schema validation', () => {
+    // eslint-disable-next-line vitest/expect-expect
     it(
-      testName,
+      'validate all configured files against their schemas',
       async () => {
         let totalFailed = 0;
 

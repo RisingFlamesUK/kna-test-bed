@@ -64,21 +64,19 @@ export async function runScenariosFromFile(configPath: string, opts?: { callerDi
 }
 
 function defineScenario(entry: ScenarioEntry, ctx: ResolveCtx, configKey: string) {
-  const testGroupName = entry.testGroupName;
-  const title = entry.it ?? entry.testGroupName;
+  const testGroupName: string = entry.testGroupName;
+  const title: string = entry.it ?? entry.testGroupName;
 
-  // eslint-disable-next-line vitest/valid-title
-  describe(testGroupName as string, () => {
-    // eslint-disable-next-line vitest/valid-title
+  describe(testGroupName, () => {
     it(
       title,
       async () => {
-        const log = scenarioLoggerFromEnv(testGroupName as string);
+        const log = scenarioLoggerFromEnv(testGroupName);
 
         const hierarchyContext = {
           area: 'scenarios',
           config: configKey,
-          testGroup: testGroupName as string,
+          testGroup: testGroupName,
           test: title,
         };
 

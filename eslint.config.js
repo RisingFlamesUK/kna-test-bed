@@ -49,7 +49,7 @@ export default [
     },
   },
 
-  // Infra & tests: don’t fight strictness
+  // Infra & tests: don't fight strictness
   {
     files: ['suite/**/*.ts', 'test/**/*.ts', 'test/**/*.js'],
     rules: {
@@ -58,6 +58,14 @@ export default [
         'warn',
         { argsIgnorePattern: '^_', varsIgnorePattern: '^_' },
       ],
+    },
+  },
+
+  // Test runners: allow dynamic test titles from JSON config
+  {
+    files: ['test/e2e/**/_runner/*.ts'],
+    rules: {
+      'vitest/valid-title': 'off',
     },
   },
 
