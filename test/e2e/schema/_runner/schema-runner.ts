@@ -39,42 +39,21 @@ function _getSchemaForEntry(entry: SchemaFileEntry, defaultSchema?: string): str
 }
 
 /**
- * Expand a glob pattern to absolute file paths
- */
-async function expandPattern(pattern: string): Promise<string[]> {
-  const abs = path.isAbsolute(pattern) ? pattern : path.resolve(process.cwd(), pattern);
-
-  // Check if it's a literal file (no glob characters)
-  if (!pattern.includes('*') && !pattern.includes('?') && !pattern.includes('[')) {
-    if (fs.existsSync(abs)) {
-      return [abs];
-    }
-    return [];
-  }
-
-  // Use fast-glob for patterns
-  const matches = await fg(pattern, {
-    absolute: true,
-    onlyFiles: true,
-    dot: false,
-  });
-
-  return matches;
-}
-
-/**
  * Validate a single file against a schema using ajv-cli
+ * Returns validation result for detail JSON collection
  */
 async function validateFile(
   filePath: string,
   schemaPath: string,
-  log: ReturnType<typeof scenarioLoggerFromEnv>,
-  ci: ReturnType<typeof createCI>,
-  hierarchyContext: { area: string; config: string; testGroup: string; test: string },
-): Promise<{ passed: boolean; errorCount: number; details?: string }> {
+  _hierarchyContext: { area: string; config: string; testGroup: string; test: string },
+): Promise<{
+  passed: boolean;
+  errorCount: number;
+  details?: string;
+  ciStatus: 'ok' | 'fail';
+  ciMessage: string;
+}> {
   const relativePath = getRelativePath(filePath);
-
-  log.step(`Validating ${relativePath} with ajv-cli`);
 
   try {
     await execa(
@@ -93,14 +72,12 @@ async function validateFile(
       { stdout: 'pipe', stderr: 'pipe' },
     );
 
-    // Success
-    log.write(`file: OK`);
-    log.write(`errors: 0`);
-    log.pass(`${filePath}: OK`);
-    recordSchemaStep('ok', `${relativePath}: OK`);
-    ci.testStep(`${relativePath}: OK`, 'ok', undefined, hierarchyContext);
-
-    return { passed: true, errorCount: 0 };
+    return {
+      passed: true,
+      errorCount: 0,
+      ciStatus: 'ok',
+      ciMessage: `${relativePath}: OK`,
+    };
   } catch (e: any) {
     const err = e?.stderr ?? e?.message ?? String(e);
     const errStr = String(err);
@@ -140,30 +117,21 @@ async function validateFile(
         errorCount = 1;
       }
 
-      log.write(`file: FAILED`);
-      log.write(`errors: ${errorCount}`);
-
-      // Write boxed error details
-      if (detailLines) {
-        log.boxStart(`validation errors`);
-        log.boxLine(detailLines);
-        log.boxEnd(`end validation errors (${errorCount} error${errorCount !== 1 ? 's' : ''})`);
-      }
-
-      log.fail(`${filePath}: FAILED`);
-      recordSchemaStep('fail', `${relativePath}: FAILED`);
-      ci.testStep(`${relativePath}: FAILED`, 'fail', undefined, hierarchyContext);
-
-      return { passed: false, errorCount, details: detailLines };
+      return {
+        passed: false,
+        errorCount,
+        details: detailLines,
+        ciStatus: 'fail',
+        ciMessage: `${relativePath}: FAILED`,
+      };
     } else {
-      // Unexpected error format
-      log.write(`file: FAILED`);
-      log.write(`errors: unknown`);
-      log.fail(`${filePath}: FAILED - ${errStr}`);
-      recordSchemaStep('fail', `${relativePath}: FAILED`);
-      ci.testStep(`${relativePath}: FAILED`, 'fail', undefined, hierarchyContext);
-
-      return { passed: false, errorCount: 1, details: errStr };
+      return {
+        passed: false,
+        errorCount: 1,
+        details: errStr,
+        ciStatus: 'fail',
+        ciMessage: `${relativePath}: FAILED`,
+      };
     }
   }
 }
@@ -190,86 +158,130 @@ export async function runSchemaTestsFromFile(configPath: string) {
   const ci = createCI(hierarchyContext);
 
   describe(config.describe ?? 'schema validation', () => {
-    // eslint-disable-next-line vitest/expect-expect
-    it(
-      'validate all configured files against their schemas',
-      async () => {
-        let totalFailed = 0;
+    // Expect the new `schema` shape: an array of test groups
+    const groups = config.schema;
 
-        // Expect the new `schema` shape: an array of test groups
-        const groups = config.schema;
+    if (!Array.isArray(groups) || groups.length === 0) {
+      // eslint-disable-next-line vitest/expect-expect
+      it('should have schema test groups configured', () => {
+        log.step('No schema test groups configured for validation');
+        log.write('⚠️ No schema test groups configured');
+        recordSchemaStep('skip', 'No schema test groups configured');
+        throw new Error('No schema test groups configured');
+      });
+      return;
+    }
 
-        if (!Array.isArray(groups) || groups.length === 0) {
-          log.step('No schema test groups configured for validation');
-          log.write('⚠️ No schema test groups configured');
-          recordSchemaStep('skip', 'No schema test groups configured');
-          await (log as any)?.close?.();
-          return;
+    // Create individual concurrent it() blocks for each file validation
+    for (const group of groups) {
+      const groupName = group.testGroupName ?? group.it ?? '(group)';
+      const testsObj = group.tests ?? {};
+
+      for (const [testName, testEntry] of Object.entries(testsObj)) {
+        const displayName = `${groupName} :: ${testName}`;
+        const pattern = (testEntry as any).pattern as string | undefined;
+        const schemaPath =
+          ((testEntry as any).schema as string | undefined) || config.defaultSchema;
+
+        if (!pattern) {
+          // eslint-disable-next-line vitest/expect-expect
+          it(`${displayName} (skipped: no pattern)`, () => {
+            log.step(`No pattern specified for test: ${displayName}`);
+            log.write('⚠️ No pattern for test');
+            recordSchemaStep('skip', `${displayName}: no pattern configured`);
+          });
+          continue;
+        }
+        if (!schemaPath) {
+          // eslint-disable-next-line vitest/expect-expect
+          it(`${displayName} (skipped: no schema)`, () => {
+            log.step(`No schema specified for test: ${displayName}`);
+            log.write('⚠️ No schema for test');
+            recordSchemaStep('skip', `${displayName}: no schema configured`);
+          });
+          continue;
         }
 
-        // Iterate groups and validate each named test inside
-        for (const group of groups) {
-          const groupName = group.testGroupName ?? group.it ?? '(group)';
-          const testsObj = group.tests ?? {};
-          for (const [testName, testEntry] of Object.entries(testsObj)) {
-            const displayName = `${groupName} :: ${testName}`;
-            const pattern = (testEntry as any).pattern as string | undefined;
-            const schemaPath =
-              ((testEntry as any).schema as string | undefined) || config.defaultSchema;
+        // Expand pattern synchronously at test definition time
+        const files = fg.sync(pattern, { cwd: process.cwd(), absolute: true, onlyFiles: true });
 
-            if (!pattern) {
-              log.step(`No pattern specified for test: ${displayName}`);
-              log.write('⚠️ No pattern for test');
-              recordSchemaStep('skip', `${displayName}: no pattern configured`);
-              continue;
-            }
-            if (!schemaPath) {
-              log.step(`No schema specified for test: ${displayName}`);
-              log.write('⚠️ No schema for test');
-              recordSchemaStep('skip', `${displayName}: no schema configured`);
-              continue;
-            }
+        if (files.length === 0) {
+          // eslint-disable-next-line vitest/expect-expect
+          it(`${displayName} (skipped: no files matched)`, () => {
+            log.step(`Pattern matched no files: ${pattern}`);
+            log.write('⚠️ No files matched');
+            recordSchemaStep('skip', `${displayName}: no files matched`);
+          });
+          continue;
+        }
 
-            const files = await expandPattern(pattern);
+        // Create concurrent test for each matched file
+        for (const file of files) {
+          const fileDisplay = getRelativePath(file);
 
-            if (files.length === 0) {
-              log.step(`Pattern matched no files: ${pattern}`);
-              log.write('⚠️ No files matched');
-              recordSchemaStep('skip', `${displayName}: no files matched`);
-              continue;
-            }
+          // eslint-disable-next-line vitest/expect-expect
+          it.concurrent(
+            fileDisplay,
+            async () => {
+              const result = await validateFile(file, schemaPath, hierarchyContext);
 
-            // Validate each matched file
-            for (const file of files) {
-              const result = await validateFile(file, schemaPath, log, ci, hierarchyContext);
+              // Record step and emit CI event (detail JSON collection)
+              recordSchemaStep(result.ciStatus === 'ok' ? 'ok' : 'fail', result.ciMessage);
+              ci.testStep(result.ciMessage, result.ciStatus, undefined, hierarchyContext);
+
               if (!result.passed) {
-                totalFailed++;
+                throw new Error(`Schema validation failed for ${fileDisplay}`);
               }
-            }
-          }
-        }
-
-        // Explicit log line (absolute file URL)
-        const stamp = process.env[ENV_LOG_STAMP] || '';
-        const absLog = (
-          stamp
-            ? buildScenarioLogPath(stamp, 'schema-validation')
-            : path.resolve(LOGS_DIR, 'latest', E2E_DIR, SCHEMA_LOG_FILE)
-        )
-          .replace(/\\/g, '/')
-          .replace(/ /g, '%20');
-        ci.write(`  - log: file:///${absLog}`, undefined, hierarchyContext);
-
-        await (log as any)?.close?.();
-
-        // Throw if any files failed
-        if (totalFailed > 0) {
-          throw new Error(
-            `Schema validation failed: ${totalFailed} file${totalFailed !== 1 ? 's' : ''} invalid`,
+            },
+            SCHEMA_TEST_TIMEOUT_MS,
           );
         }
-      },
-      SCHEMA_TEST_TIMEOUT_MS,
-    ); // 1 minute - ajv validation can be slow for many files
+      }
+    }
+
+    // Add a final test to write the complete log from detail JSON and close
+    // eslint-disable-next-line vitest/expect-expect
+    it('write complete log from results', async () => {
+      // Read the schema detail JSON to get all results in order
+      const stamp = process.env[ENV_LOG_STAMP] || '';
+      const detailPath = stamp
+        ? path.resolve(LOGS_DIR, stamp, E2E_DIR, '_schema-detail.json')
+        : path.resolve(LOGS_DIR, 'latest', E2E_DIR, '_schema-detail.json');
+
+      if (fs.existsSync(detailPath)) {
+        const detailRaw = await readFile(detailPath, 'utf8');
+        const details = JSON.parse(detailRaw);
+
+        // Write sequentially numbered log entries
+        if (Array.isArray(details)) {
+          for (let i = 0; i < details.length; i++) {
+            const entry = details[i];
+            const num = i + 1;
+            const message = entry.message || '';
+            const isOk = entry.severity === 'ok';
+
+            // Extract file path from message (format: "path/to/file: OK" or "path/to/file: FAILED")
+            const filePath = message.replace(/:\s*(OK|FAILED)$/, '');
+            const absPath = path.resolve(process.cwd(), filePath);
+
+            log.write(`${num}) Validating ${filePath} with ajv-cli`);
+            log.write(`   file: ${isOk ? 'OK' : 'FAILED'}`);
+            log.write(`   errors: ${isOk ? '0' : 'unknown'}`);
+            log.write(`  ${isOk ? '✅' : '❌'} ${absPath}: ${isOk ? 'OK' : 'FAILED'}`);
+          }
+        }
+      }
+
+      // Write log link
+      const absLog = (
+        stamp
+          ? buildScenarioLogPath(stamp, 'schema-validation')
+          : path.resolve(LOGS_DIR, 'latest', E2E_DIR, SCHEMA_LOG_FILE)
+      )
+        .replace(/\\/g, '/')
+        .replace(/ /g, '%20');
+      ci.write(`  - log: file:///${absLog}`, undefined, hierarchyContext);
+      await (log as any)?.close?.();
+    });
   });
 }

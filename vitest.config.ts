@@ -8,10 +8,10 @@ export default defineConfig({
     environment: 'node',
     globalSetup: './suite/global-setup.ts',
 
-    // Run in-band to keep CI/progressive output strictly ordered
+    // Allow parallel execution within files while maintaining file order via sequencer
     poolOptions: {
       threads: {
-        singleThread: true,
+        singleThread: false,
       },
     },
     include: ['test/e2e/**/*.test.ts'],
